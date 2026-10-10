@@ -5,8 +5,8 @@ door, lock and presence changes, AI-described camera activity (LLM Vision), Frig
 review items with **animated thumbnails** and **the exact video clip**, Nest doorbell
 clips, and any other event you want to log.
 
-Status: planning, reviewed 2026-10-10 (§12). Nothing is implemented yet. This document
-is the brief for the implementing agent. Private details about the reference install
+Status: v0.1.0 released 2026-10-10 (M1–M3 done; §9). Reviews are logged in §12. This
+document is the brief for the implementing agent. Private details about the reference install
 (entity ids, hosts, camera mapping, deploy steps) live in `CLAUDE.local.md`, which is
 gitignored. Read it if it exists, and never copy its contents into tracked files.
 
@@ -768,8 +768,13 @@ to the clip.
 - *Status (2026-10-10):* local work done. That covers the README (features, dependency
   tiers, install, options, own events, deep links, troubleshooting) with a screenshot of
   generated data, the CHANGELOG, version 0.1.0, an a11y pass, and a release workflow
-  that checks the tag against the package version. Publishing (public repository, history
-  cleanup, tag, HACS install on the reference install) waits for the owner's go-ahead.
+  that checks the tag against the package version.
+- *Released 2026-10-10:* `v0.1.0` is public on GitHub, published as one clean commit.
+  CI and the release workflow passed, and the release carries `event-reel-card.js`. It is
+  installed through HACS (custom repository) on the reference install, and the HACS file
+  matches the release byte for byte. The card replaced the old timeline card in the
+  reference install's day view, and the automation that copied door/lock/presence changes
+  into LLM Vision is switched off.
 
 **M4+. P2 items.**
 
