@@ -251,6 +251,12 @@ npm run build   # dist/event-reel-card.js
 The dev harness uses generated example data. With `FRIGATE_URL` in `.env.local` and
 `?live=1`, it plays real Frigate media through a dev proxy. See [PLAN.md](PLAN.md) §7.
 
+## Contributing
+
+Contributions are welcome, including ones written with AI coding agents. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR; agents follow
+[AGENTS.md](AGENTS.md).
+
 ## Privacy
 
 The card runs in your browser and talks only to your own Home Assistant. Media URLs are

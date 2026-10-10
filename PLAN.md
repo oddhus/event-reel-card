@@ -784,8 +784,10 @@ to the clip.
 
 - Never commit entity ids, names, hostnames, IPs, tokens, camera footage or fixtures
   from a real home. Use neutral examples (`camera.entrance`, `person.alex`).
-- Real-install notes go in `CLAUDE.local.md` and real fixtures in `*.local.json`. Both
-  are gitignored.
+- Real-install notes go in `CLAUDE.local.md` (or `AGENTS.local.md`) and real fixtures in
+  `*.local.json`. All are gitignored.
+- Contributions, including AI-assisted ones, follow `CONTRIBUTING.md`; agents follow
+  `AGENTS.md`.
 - Check `git diff --cached` for private data before every commit.
 
 ## 11. Open questions

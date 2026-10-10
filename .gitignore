@@ -8,6 +8,7 @@ Thumbs.db
 
 # Private, never commit
 CLAUDE.local.md
+AGENTS.local.md
 .env.local
 .env.*.local
 dev/fixtures/*.local.json
