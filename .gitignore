@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+
+# Private, never commit
+CLAUDE.local.md
+.env.local
+.env.*.local
+dev/fixtures/*.local.json
+
+# Local deploy helpers with private hosts
+*.local.sh
+.claude/launch.json

@@ -1,0 +1,50 @@
+:root {
+  --primary-text-color: #212121;
+  --secondary-text-color: #727272;
+  --disabled-text-color: #bdbdbd;
+  --card-background-color: #fff;
+  --primary-background-color: #fafafa;
+  --secondary-background-color: #e5e5e5;
+  --divider-color: rgba(0, 0, 0, 0.12);
+  --primary-color: #03a9f4;
+  --accent-color: #ff9800;
+  --error-color: #db4437;
+  --warning-color: #ffa600;
+  --success-color: #43a047;
+  --info-color: #039be5;
+  --ha-card-border-radius: 12px;
+  --ha-card-box-shadow: none;
+  --ha-card-border-color: #e0e0e0;
+  font-family: Roboto, "Segoe UI", system-ui, sans-serif;
+}
+body.dark {
+  --primary-text-color: #e1e1e1;
+  --secondary-text-color: #9b9b9b;
+  --disabled-text-color: #6f6f6f;
+  --card-background-color: #1c1c1c;
+  --primary-background-color: #111;
+  --secondary-background-color: #282828;
+  --divider-color: rgba(225, 225, 225, 0.12);
+  --ha-card-border-color: #333;
+}
+body {
+  margin: 0;
+  background: var(--primary-background-color);
+  color: var(--primary-text-color);
+}
+.toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--divider-color);
+}
+#stage {
+  max-width: 720px;
+  margin: 16px auto;
+  padding: 0 16px;
+}
+#stage.narrow {
+  max-width: 375px;
+  padding: 0;
+}

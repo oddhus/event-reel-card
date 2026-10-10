@@ -1,0 +1,33 @@
+{
+  "name": "event-reel-card",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Home Assistant Lovelace card: a compact timeline of the day's events with animated Frigate previews and exact clips.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.dev.config.ts",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . && tsc --noEmit",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "hls.js": "^1.7.3",
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@mdi/js": "^7.4.47",
+    "@types/node": "^26.6.3",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}
