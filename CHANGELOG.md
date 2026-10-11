@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The card file starts with the license texts of the code it bundles, as those licenses
+  require: Lit, hls.js, and the eventemitter3, url-toolkit and SVTA Common Media Library
+  code inside hls.js. Earlier builds left them out. This adds about 15 KB (5 KB gzipped).
+
 ## [0.2.1] - 2026-10-11
 
 ### Changed
@@ -10,9 +18,6 @@ All notable changes to this project are documented here. The project uses
 - `entities` given as a single string (`entities: person.alex`) is now a configuration
   error asking for a list. Before, it was read letter by letter.
 - The card file is fully minified: about 478 KB instead of 603 KB (151 KB gzipped).
-- The card file starts with the license texts of the code it bundles, as those licenses
-  require: Lit, hls.js, and the eventemitter3, url-toolkit and SVTA Common Media Library
-  code inside hls.js. Earlier builds left them out. This adds about 15 KB (5 KB gzipped).
 
 ### Fixed
 
