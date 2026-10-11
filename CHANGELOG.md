@@ -10,6 +10,9 @@ All notable changes to this project are documented here. The project uses
 - Durations are translated: Norwegian shows `1 t 5 min` instead of `1h 5m`.
 - Who changed a lock (`actor_attribute`) is looked up only for new changes, in the history
   around them, instead of the whole range with attributes on every refresh.
+- The card file starts with the license texts of the code it bundles, as those licenses
+  require: Lit, hls.js, and the eventemitter3, url-toolkit and SVTA Common Media Library
+  code inside hls.js. Earlier builds left them out. This adds about 15 KB (5 KB gzipped).
 
 ### Fixed
 
@@ -32,9 +35,6 @@ All notable changes to this project are documented here. The project uses
 - `entities` given as a single string (`entities: person.alex`) is now a configuration
   error asking for a list. Before, it was read letter by letter.
 - The card file is fully minified: about 478 KB instead of 603 KB (151 KB gzipped).
-- The card file starts with the license texts of the code it bundles, as those licenses
-  require: Lit, hls.js, and the eventemitter3, url-toolkit and SVTA Common Media Library
-  code inside hls.js. Earlier builds left them out. This adds about 15 KB (5 KB gzipped).
 
 ### Fixed
 
