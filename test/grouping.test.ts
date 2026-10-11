@@ -153,4 +153,36 @@ describe("groupTimeline review fixes", () => {
     expect(items.map((i) => i.kind).sort()).toEqual(["burst", "event"]);
     expect(items.find((i) => i.kind === "event")?.id).toBe(unmapped.id);
   });
+
+  it("keeps events with a description out of bursts, so the description stays readable", () => {
+    const parcel = ev({
+      provider: "llmvision",
+      start: 1005,
+      title: "Package delivered",
+      description: "A package was left by the door.",
+    });
+    const note = ev({
+      provider: "llmvision",
+      start: 1015,
+      title: "Courier left",
+      description: "The van drove off.",
+    });
+    const unlocked = lock(1000, "Unlocked");
+    const items = groupTimeline([unlocked, parcel, note, lock(1020, "Locked")], { window: 120 });
+    expect(items.map((i) => [i.kind, i.id])).toEqual([
+      ["burst", `burst:${unlocked.id}`],
+      ["event", note.id],
+      ["event", parcel.id],
+    ]);
+    const burst = items.find((i) => i.kind === "burst");
+    if (burst?.kind !== "burst") throw new Error("no burst");
+    expect(labels(burst)).toEqual(["Front door: Unlocked · Locked"]);
+  });
+
+  it("still bursts AI events that have only a title", () => {
+    const a = ev({ provider: "llmvision", start: 1000, title: "Lights on" });
+    const b = ev({ provider: "llmvision", start: 1010, title: "Lights off" });
+    const items = groupTimeline([a, b], { window: 120 });
+    expect(items.map((i) => i.kind)).toEqual(["burst"]);
+  });
 });

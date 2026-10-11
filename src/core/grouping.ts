@@ -48,8 +48,12 @@ export function mediaKey(e: ReelEvent): string | undefined {
   return undefined;
 }
 
-/** Only plain state changes go into bursts; anything with media keeps its own row. */
-const isBurstable = (e: ReelEvent) => !mediaKey(e) && !BURST_EXCLUDED.has(e.category);
+/**
+ * Only plain state changes go into bursts. Anything with media keeps its own row, and so does
+ * an event with a description (an AI event without a camera): a burst step shows only a label.
+ */
+const isBurstable = (e: ReelEvent) =>
+  !mediaKey(e) && !e.description && !BURST_EXCLUDED.has(e.category);
 
 function chain(
   events: ReelEvent[],

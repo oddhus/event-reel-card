@@ -1,4 +1,4 @@
-import type { TimeRange } from "../types";
+import type { Localize, TimeRange } from "../types";
 
 export type RangeSpec = { kind: "rolling"; hours: number } | { kind: "today" };
 
@@ -108,14 +108,21 @@ export function isoToEpoch(iso: string): number {
   return Date.parse(iso) / 1000;
 }
 
-/** `49s`, `2m 10s`, `1h 5m`. */
-export function formatDuration(seconds: number): string {
+/** `49s`, `2m 10s`, `1h 5m` in English; the units come from the `duration.*` strings. */
+export function formatDuration(seconds: number, t: Localize): string {
   const s = Math.max(0, Math.round(seconds));
-  if (s < 60) return `${s}s`;
+  if (s < 60) return t("duration.s", { s });
   const m = Math.floor(s / 60);
-  if (m < 60) return s % 60 ? `${m}m ${s % 60}s` : `${m}m`;
+  if (m < 60) return s % 60 ? t("duration.m_s", { m, s: s % 60 }) : t("duration.m", { m });
   const h = Math.floor(m / 60);
-  return m % 60 ? `${h}h ${m % 60}m` : `${h}h`;
+  return m % 60 ? t("duration.h_m", { h, m: m % 60 }) : t("duration.h", { h });
+}
+
+let browserZone: string | undefined;
+
+/** The browser's time zone. Asked once: creating a formatter for it on every row is slow. */
+export function browserTimeZone(): string {
+  return (browserZone ??= Intl.DateTimeFormat().resolvedOptions().timeZone);
 }
 
 export interface TimeFormatOptions {
@@ -123,24 +130,34 @@ export interface TimeFormatOptions {
   timeZone: string;
   /** HA locale time_format: "12", "24", "language" or "system". */
   timeFormat?: string;
+  /** The locale "system" takes its clock from; the browser's when undefined. */
+  systemLocale?: string;
 }
 
 const timeFormatters = new Map<string, Intl.DateTimeFormat>();
 
-function hourCycle(timeFormat: string | undefined): Intl.DateTimeFormatOptions["hourCycle"] {
-  if (timeFormat === "24") return "h23";
-  if (timeFormat === "12") return "h12";
+/** True when the locale (the browser's when undefined) uses a 12-hour clock. */
+function uses12Hour(locale: string | undefined): boolean {
+  const cycle = new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hourCycle;
+  return cycle === "h11" || cycle === "h12";
+}
+
+function hourCycle(opts: TimeFormatOptions): Intl.DateTimeFormatOptions["hourCycle"] {
+  if (opts.timeFormat === "24") return "h23";
+  if (opts.timeFormat === "12") return "h12";
+  // As in HA: the clock follows the browser's locale, while the words stay in the HA language.
+  if (opts.timeFormat === "system") return uses12Hour(opts.systemLocale) ? "h12" : "h23";
   return undefined;
 }
 
 export function formatTime(epoch: number, opts: TimeFormatOptions): string {
-  const key = `${opts.language}|${opts.timeZone}|${opts.timeFormat ?? ""}`;
+  const key = `${opts.language}|${opts.timeZone}|${opts.timeFormat ?? ""}|${opts.systemLocale ?? ""}`;
   let f = timeFormatters.get(key);
   if (!f) {
     f = new Intl.DateTimeFormat(opts.language, {
       hour: "2-digit",
       minute: "2-digit",
-      hourCycle: hourCycle(opts.timeFormat),
+      hourCycle: hourCycle(opts),
       timeZone: opts.timeZone,
     });
     timeFormatters.set(key, f);
