@@ -5,7 +5,7 @@ door, lock and presence changes, AI-described camera activity (LLM Vision), Frig
 review items with **animated thumbnails** and **the exact video clip**, Nest doorbell
 clips, and any other event you want to log.
 
-Status: v0.2.0 released 2026-10-11 (M1–M3 done, then loading and day navigation; §9). Reviews are logged in §12. This
+Status: v0.2.1 released 2026-10-11 (M1–M3 done, then loading and day navigation, then review fixes; §9). Reviews are logged in §12. This
 document is the brief for the implementing agent. Private details about the reference install
 (entity ids, hosts, camera mapping, deploy steps) live in `CLAUDE.local.md`, which is
 gitignored. Read it if it exists, and never copy its contents into tracked files.
