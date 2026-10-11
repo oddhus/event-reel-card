@@ -94,8 +94,10 @@ export class EventReelStrip extends LitElement {
     this.start = undefined;
   };
 
+  /** The cursor, unless its row is gone (filtered out, or grouped under a new id). */
   private get stepFrom(): string | undefined {
-    return this.cursor ?? this.selected;
+    const ticks = this.model?.ticks ?? [];
+    return this.cursor && ticks.some((t) => t.id === this.cursor) ? this.cursor : this.selected;
   }
 
   /** Arrow keys step through rows in time order; Home/End jump to the ends. */

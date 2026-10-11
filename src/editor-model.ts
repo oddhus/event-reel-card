@@ -93,7 +93,7 @@ function putProvider(out: Obj, key: string, value: unknown) {
 
 /** A range the card understands: `today`, or a positive number of hours (`24`, `12h`). */
 export function isValidRange(value: string): boolean {
-  return parseRangeStrict(value.trim()) !== undefined;
+  return parseRangeStrict(value) !== undefined;
 }
 
 /**
@@ -111,7 +111,8 @@ export function formToConfig(
   if (form.title) out.title = form.title;
   else delete out.title;
   setOrDrop(out, orig, "density", form.density ?? "compact", "compact");
-  const range = form.range && isValidRange(form.range) ? form.range : rangeText(original.range);
+  const range =
+    form.range && isValidRange(form.range) ? form.range.trim() : rangeText(original.range);
   setOrDrop(out, orig, "range", range, "24h");
   setOrDrop(out, orig, "preview", form.preview ?? "visible", "visible");
   setOrDrop(out, orig, "language", form.language || "auto", "auto");

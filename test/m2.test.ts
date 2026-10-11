@@ -211,6 +211,8 @@ describe("M2 review fixes", () => {
     expect(pick("1.5h")).toBe("1.5h");
     // And back from "today" to the default.
     expect(pick("24h")).toBe("24h");
+    // Typed with spaces: saved as the card reads it.
+    expect(pick(" 6h ")).toBe("6h");
   });
 
   it("restores a custom severity list when 'alerts only' is switched off again", () => {

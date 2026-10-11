@@ -73,6 +73,8 @@ describe("parseRange", () => {
     expect(parseRange(12)).toEqual({ kind: "rolling", hours: 12 });
     expect(parseRange("6")).toEqual({ kind: "rolling", hours: 6 });
     expect(parseRange("today")).toEqual({ kind: "today" });
+    expect(parseRange(" today ")).toEqual({ kind: "today" });
+    expect(parseRange(" 12h ")).toEqual({ kind: "rolling", hours: 12 });
   });
 
   it("falls back to 24 h", () => {

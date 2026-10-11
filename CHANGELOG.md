@@ -16,14 +16,15 @@ All notable changes to this project are documented here. The project uses
 - The visual editor can set the range in hours again (12, 24 or 48 h). Before, only
   "Today" was accepted, and once it was picked the editor couldn't switch back.
 - AI events no longer wait for a slow Nest lookup. Doorbell rows show right away and get
-  their clip on a later refresh; before, a Nest lookup that never answered left LLM Vision
-  "unavailable" until the page was reloaded.
+  their clip as soon as the lookup answers; before, a Nest lookup that never answered left
+  LLM Vision "unavailable" until the page was reloaded. A failed lookup also keeps the
+  clips of doorbell events it already knew.
 - Arrow keys on the day strip step on from the last picked row, also after a pause. Before,
   they jumped back to the newest row once the highlight faded.
 - With reduced motion or data saving, the player shows the still instead of looping the
   preview while the clip loads.
 - With `preview: hover`, focusing a row with the keyboard plays its preview, as hovering
-  does.
+  does, and a hovered or focused preview keeps playing when its row gets newer media.
 - `range: today` starts at the first moment of the day where daylight saving time skips
   midnight, instead of an hour into the previous evening.
 - A camera group's thumbnail no longer shows an older event's image when a slow request

@@ -711,6 +711,7 @@ export class EventReelCard extends LitElement {
     const reduced = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     row.scrollIntoView({ block: "center", behavior: reduced ? "auto" : behavior });
     this._highlight = id;
+    this._stripCursor = id; // the strip's arrow keys step on from the row shown last
     window.clearTimeout(this._highlightTimer);
     this._highlightTimer = window.setTimeout(() => (this._highlight = undefined), 2000);
   }
@@ -724,7 +725,6 @@ export class EventReelCard extends LitElement {
       (ev.detail.id && items.find((i) => i.id === ev.detail.id)) ||
       nearestItem(items, timeAt(ev.detail.position, this._range));
     if (!item) return;
-    this._stripCursor = item.id;
     const now = performance.now();
     const recent = now - this._lastStripScroll < 400;
     if (recent && item.id === this._lastStripItem) return;

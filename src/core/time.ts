@@ -4,10 +4,11 @@ export type RangeSpec = { kind: "rolling"; hours: number } | { kind: "today" };
 
 /** Parses `24h`, `12`, `today`; undefined when the value isn't a range. */
 export function parseRangeStrict(value: unknown): RangeSpec | undefined {
-  if (value === "today") return { kind: "today" };
   if (typeof value === "number" && value > 0) return { kind: "rolling", hours: value };
   if (typeof value === "string") {
-    const m = /^(\d+(?:\.\d+)?)\s*h?$/i.exec(value.trim());
+    const v = value.trim();
+    if (v === "today") return { kind: "today" };
+    const m = /^(\d+(?:\.\d+)?)\s*h?$/i.exec(v);
     if (m && Number(m[1]) > 0) return { kind: "rolling", hours: Number(m[1]) };
   }
   return undefined;

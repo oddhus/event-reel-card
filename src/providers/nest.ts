@@ -27,12 +27,22 @@ export class NestTokenResolver {
   private fetchedAt = -Infinity;
   private browses = 0;
   private browse?: { id: number; since: number; done: Promise<void> };
+  private listeners = new Set<() => void>();
 
   constructor(private readonly now: () => number = () => Date.now() / 1000) {}
 
+  /** Calls `listener` when a browse finds tokens after its caller stopped waiting for it. */
+  onLateAnswer(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
   /**
    * Device ids for the given tokens. Browses media source again when a token is new, but
-   * waits for it at most `waitMs`: a slower browse keeps going, and later calls use its answer.
+   * waits for it at most `waitMs`: a slower browse keeps going and tells `onLateAnswer`
+   * listeners when it finds the tokens. A failed browse keeps the tokens found earlier.
    */
   async resolve(
     hass: HomeAssistant,
@@ -40,32 +50,43 @@ export class NestTokenResolver {
     waitMs = Infinity,
   ): Promise<Map<string, string>> {
     const now = this.now();
-    const worthBrowsing = tokens.some((t) => {
-      if (this.tokens.has(t)) return false;
+    const wanted = tokens.filter((t) => !this.tokens.has(t));
+    const worthBrowsing = wanted.some((t) => {
       const seen = this.unknown.get(t);
       return seen === undefined || now - seen > RETRY_UNKNOWN_AFTER;
     });
-    if (worthBrowsing && now - this.fetchedAt > REFRESH_AFTER) {
-      const done = this.refresh(hass).then(() => {
-        for (const t of tokens) if (!this.tokens.has(t)) this.unknown.set(t, this.now());
-      });
-      done.catch(() => undefined); // a browse that fails after the wait is retried later
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const waited = new Promise<void>((resolve) => {
-        if (Number.isFinite(waitMs)) timer = setTimeout(resolve, waitMs);
-      });
-      try {
-        await Promise.race([done, waited]);
-      } finally {
-        clearTimeout(timer);
+    if (!worthBrowsing || now - this.fetchedAt <= REFRESH_AFTER) return this.tokens;
+
+    const browse = this.refresh(hass);
+    let gaveUp = false;
+    const done = browse.done.then(() => {
+      // Only a browse started for this call shows a token is unknown: an older one may
+      // have listed the events before this one existed.
+      if (browse.since >= now) {
+        for (const t of wanted) if (!this.tokens.has(t)) this.unknown.set(t, this.now());
       }
+      if (gaveUp && wanted.some((t) => this.tokens.has(t))) {
+        for (const listener of this.listeners) listener();
+      }
+    });
+    done.catch(() => undefined); // a browse that fails after the wait is retried later
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waited = new Promise<"timeout">((resolve) => {
+      if (Number.isFinite(waitMs)) timer = setTimeout(() => resolve("timeout"), waitMs);
+    });
+    try {
+      gaveUp = (await Promise.race([done, waited])) === "timeout";
+    } catch (err) {
+      console.debug("[event-reel] Nest lookup failed", err);
+    } finally {
+      clearTimeout(timer);
     }
     return this.tokens;
   }
 
-  private refresh(hass: HomeAssistant): Promise<void> {
+  private refresh(hass: HomeAssistant): { since: number; done: Promise<void> } {
     const running = this.browse;
-    if (running && this.now() - running.since < BROWSE_STALE) return running.done;
+    if (running && this.now() - running.since < BROWSE_STALE) return running;
     const id = ++this.browses;
     const done = this.browseAll(hass).finally(() => {
       if (this.browse?.id !== id) return; // replaced after it stalled
@@ -73,7 +94,7 @@ export class NestTokenResolver {
       this.browse = undefined;
     });
     this.browse = { id, since: this.now(), done };
-    return done;
+    return this.browse;
   }
 
   private async browseAll(hass: HomeAssistant): Promise<void> {

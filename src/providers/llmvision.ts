@@ -90,7 +90,7 @@ interface ServiceResponse {
 
 /**
  * Milliseconds the events wait for the Nest lookup. A slower lookup must not hold back every
- * AI event: doorbell rows show without their clip, which a later refresh fills in.
+ * AI event: doorbell rows show without their clip until the lookup answers (`subscribe`).
  */
 const NEST_WAIT = 3000;
 
@@ -122,14 +122,10 @@ export function createLlmVisionProvider(nest = new NestTokenResolver()): Provide
       });
 
       const tokens = raw.map((e) => e.camera_name ?? "").filter(isNestToken);
-      let nestDevices = new Map<string, string>();
-      if (tokens.length && ctx.config.nest.enabled) {
-        try {
-          nestDevices = await nest.resolve(ctx.hass, tokens, NEST_WAIT);
-        } catch (err) {
-          console.debug("[event-reel] Nest lookup failed", err);
-        }
-      }
+      const nestDevices =
+        tokens.length && ctx.config.nest.enabled
+          ? await nest.resolve(ctx.hass, tokens, NEST_WAIT)
+          : new Map<string, string>();
 
       return llmvisionToEvents(raw, {
         cameras: ctx.cameras,
@@ -138,6 +134,9 @@ export function createLlmVisionProvider(nest = new NestTokenResolver()): Provide
         friendlyName: (id) => ctx.hass.states[id]?.attributes.friendly_name,
       });
     },
+
+    // A Nest lookup that answered after the events were returned: fetch again for the clips.
+    subscribe: (_ctx, onChange) => nest.onLateAnswer(onChange),
   };
 }
 

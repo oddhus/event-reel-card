@@ -153,6 +153,10 @@ export class EventReelPreview extends LitElement {
     this._video = undefined;
     this._playing = false;
     if (this.visible) void this.load();
+    // A row still hovered or focused keeps playing with its new media.
+    if (this.mode === "hover" && (this.hovered || this.focused) && motionAllowed()) {
+      this.setPlaying(true);
+    }
     coordinator.schedule();
   }
 
@@ -167,6 +171,8 @@ export class EventReelPreview extends LitElement {
   };
 
   private onFocus = () => {
+    // Only keyboard focus: a click or tap also focuses the row, and must not keep it playing.
+    if (!this.focusHost?.matches(":focus-visible")) return;
     this.focused = true;
     if (this.mode === "hover" && motionAllowed()) this.setPlaying(true);
   };

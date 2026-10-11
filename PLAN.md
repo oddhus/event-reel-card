@@ -182,8 +182,10 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
   Nest to play clips for LLM Vision doorbell events joined by token.
 - The token lookup browses media source (the root, then one call per device). LLM Vision
   waits at most 3 s for it, so a slow browse never holds back the AI events: doorbell rows
-  show without a clip, and a later refresh uses the browse's answer. A browse with no
-  answer after 60 s no longer blocks a new one.
+  show without a clip, and when the browse answers, the provider's `subscribe` asks for a
+  refetch (also on a past day, which isn't polled). A failed browse keeps the tokens found
+  earlier. A browse with no answer after 60 s no longer blocks a new one, and only a browse
+  started after a token was asked for can mark it unknown (retried after 10 min).
 - Automations also get `trigger.event.data.attachment.video|image` (`/api/nest/event_media/...`).
 
 ### 2.4 Entities and logbook (HA core)
@@ -925,9 +927,21 @@ looked for improvements across the code. Fixed:
 - `entities` given as a string is rejected instead of read letter by letter.
 - The build minifies whitespace too (Vite keeps it for ES libraries): 603 → 478 KB.
 
-Not changed yet (low priority): player listeners accumulate per ±30 s press (harmless,
-the handlers check a token), defensive parsing of malformed Frigate records, eviction in
-the media URL cache, the clip end for ongoing reviews (now + padding instead of now − 5 s,
-impact unverified), and the empty-state lookup ignoring LLM Vision `categories` and
+GPT-6-astra and a fresh Claude (Opus 5.5) context then reviewed that diff. Fixed:
+- A click or tap focuses the row too, so only `:focus-visible` counts as focus for hover
+  previews; a hovered or focused preview keeps playing when its media changes.
+- A late Nest answer asks for a refetch (`subscribe`); a failed browse keeps known
+  tokens; a browse started before a token was asked for doesn't mark it unknown.
+- The strip ignores a cursor whose row is gone, and a deep link moves the cursor.
+- Ranges are trimmed before parsing and stored trimmed by the editor.
+- While loading, the still stays under the preview video until it has a frame.
+- Player video listeners belong to one load (`AbortController`); they used to pile up
+  per ±30 s press.
+
+Not changed: the codec/unavailable fallback still autoplays the preview with reduced
+motion, since it replaces a clip the user opened (§5.5 covers thumbnails). Low priority
+and left for later: defensive parsing of malformed Frigate records, eviction in the media
+URL cache, the clip end for ongoing reviews (now + padding instead of now − 5 s, impact
+unverified), and the empty-state lookup ignoring LLM Vision `categories` and
 `show_unmatched: false`. The UI fixes were checked in the dev harness, including
-`?slow=nest:hang` (new), and the minified file was loaded in a browser.
+`?slow=nest:hang` and `?slow=nest:5`, and the minified file was loaded in a browser.
