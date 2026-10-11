@@ -11,6 +11,8 @@ import type { WsHandler } from "./mock-hass";
 //   ?now=2026-10-08T21:00:00+02:00   pin the clock
 //   ?live=1                          real Frigate reviews and media through the Vite proxy (FRIGATE_URL)
 //   ?density=comfortable             row density
+//   ?ai=event_reel                   AI text from the Event Reel integration instead of LLM
+//                                    Vision (?ai=both: both, the same moments described twice)
 //   ?slow=frigate:5,llmvision:hang   delay a source by seconds, or never answer
 //                                    (also: entity, nest, history for actors)
 const params = new URLSearchParams(location.search);
@@ -20,6 +22,9 @@ if (pinned) {
   clock.now = () => t;
 }
 const live = params.get("live") === "1";
+const aiSource = params.get("ai") ?? "llmvision";
+const withLlmVision = aiSource !== "event_reel";
+const withEventReel = aiSource === "event_reel" || aiSource === "both";
 const now = clock.now();
 
 // Optional private snapshots (gitignored): dev/fixtures/llmvision.local.json, logbook.local.json.
@@ -105,6 +110,19 @@ const handlers: Record<string, WsHandler> = {
       events: (live && (local("llmvision") as typeof data.llmvision | undefined)) || data.llmvision,
     },
   }),
+  "event_reel/events/list": (msg) => {
+    const start = msg.start_time ? Date.parse(String(msg.start_time)) / 1000 : -Infinity;
+    const end = msg.end_time ? Date.parse(String(msg.end_time)) / 1000 : Infinity;
+    return {
+      events: data.eventReel
+        .filter((e) => {
+          const t = Date.parse(e.start) / 1000;
+          return t >= start && t <= end;
+        })
+        .sort((a, b) => Date.parse(b.start) - Date.parse(a.start))
+        .slice(0, Number(msg.limit ?? 1000)),
+    };
+  },
   "frigate/reviews/get": async (msg) => {
     if (live) {
       const q = new URLSearchParams({
@@ -162,6 +180,7 @@ const handlers: Record<string, WsHandler> = {
 const slowKeys: Record<string, string> = {
   entity: "logbook/get_events",
   llmvision: "call_service:llmvision.get_events",
+  event_reel: "event_reel/events/list",
   frigate: "frigate/reviews/get",
   nest: "media_source/browse_media",
   history: "history/history_during_period",
@@ -202,7 +221,7 @@ card.setConfig({
     { entity: "binary_sensor.front_door", name: "Front door" },
     "person.alex",
   ],
-  llmvision: { non_camera: false },
+  ...(withLlmVision ? { llmvision: { non_camera: false } } : {}),
 });
 stage.appendChild(card);
 
@@ -211,8 +230,16 @@ function apply() {
   stage.classList.toggle("narrow", narrow.checked);
   const hass = createMockHass({ language: lang.value, darkMode: dark.checked, states, handlers });
   hass.entities = entities;
-  hass.services = { llmvision: { get_events: {} } };
-  hass.config.components = ["nest", "frigate", "llmvision"];
+  hass.services = {
+    ...(withLlmVision ? { llmvision: { get_events: {} } } : {}),
+    ...(withEventReel ? { event_reel: { get_events: {} } } : {}),
+  };
+  hass.config.components = [
+    "nest",
+    "frigate",
+    ...(withLlmVision ? ["llmvision"] : []),
+    ...(withEventReel ? ["event_reel"] : []),
+  ];
   card.hass = hass;
 }
 

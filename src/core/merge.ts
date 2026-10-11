@@ -1,5 +1,5 @@
-// Links AI text events (LLM Vision) to media events (Frigate reviews) on the same camera,
-// so one real-world moment becomes one row. Pure; see PLAN.md §3.5.
+// Links AI text events (LLM Vision, Event Reel) to media events (Frigate reviews) on the same
+// camera, so one real-world moment becomes one row. Pure; see PLAN.md §3.5.
 
 import type { Category, ReelEvent } from "../types";
 
@@ -15,7 +15,10 @@ export interface MergeOptions {
   graceSeconds?: number;
 }
 
-const isText = (e: ReelEvent) => e.provider === "llmvision" && !!e.camera;
+/** Providers whose events are AI text about a camera moment. */
+export const AI_PROVIDERS = ["llmvision", "event_reel"];
+
+const isText = (e: ReelEvent) => AI_PROVIDERS.includes(e.provider) && !!e.camera;
 const isMedia = (e: ReelEvent) => e.provider === "frigate";
 
 const VAGUE: Category[] = ["motion", "custom"];
@@ -40,8 +43,47 @@ function mergeGroup(media: ReelEvent, texts: ReelEvent[]): ReelEvent {
   };
 }
 
+/**
+ * Two AI producers describing the same Nest event share its clip: keep the earliest text as
+ * the row and the others as extra text, so a ring described twice is still one row.
+ */
+function collapseSameClip(texts: ReelEvent[]): ReelEvent[] {
+  const byClip = new Map<string, ReelEvent[]>();
+  const out: ReelEvent[] = [];
+  for (const t of texts) {
+    if (!t.clip) {
+      out.push(t);
+      continue;
+    }
+    const list = byClip.get(t.clip.path);
+    if (list) list.push(t);
+    else {
+      byClip.set(t.clip.path, [t]);
+      out.push(t);
+    }
+  }
+  return out.map((t) => {
+    const same = t.clip ? (byClip.get(t.clip.path) ?? []) : [];
+    if (same.length < 2) return t;
+    const [first, ...rest] = same;
+    return {
+      ...first,
+      sources: [...new Set(same.flatMap((s) => s.sources))],
+      aliases: [...(first.aliases ?? []), ...rest.flatMap((r) => [r.id, ...(r.aliases ?? [])])],
+      description: first.description ?? rest.find((r) => r.description)?.description,
+      // A ring noticed by either producer makes it a doorbell moment.
+      category: same.some((s) => s.category === "doorbell") ? "doorbell" : first.category,
+      extra: [
+        ...(first.extra ?? []),
+        ...rest.map((r) => ({ start: r.start, title: r.title, description: r.description })),
+      ],
+      thumbnail: [...(first.thumbnail ?? []), ...rest.flatMap((r) => r.thumbnail ?? [])],
+    };
+  });
+}
+
 export function mergeEvents(events: ReelEvent[], opts: MergeOptions): ReelEvent[] {
-  const texts = events.filter(isText).sort((a, b) => a.start - b.start);
+  const texts = collapseSameClip(events.filter(isText).sort((a, b) => a.start - b.start));
   const media = events.filter(isMedia);
   const rest = events.filter((e) => !isText(e) && !isMedia(e));
 

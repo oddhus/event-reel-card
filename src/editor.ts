@@ -132,6 +132,7 @@ export class EventReelCardEditor extends LitElement {
         flatten: true,
         title: t("editor.sources"),
         schema: [
+          { name: "event_reel_enabled", selector: { boolean: {} } },
           { name: "llmvision_enabled", selector: { boolean: {} } },
           { name: "llmvision_non_camera", selector: { boolean: {} } },
           { name: "frigate_enabled", selector: { boolean: {} } },

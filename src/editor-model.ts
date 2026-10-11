@@ -15,6 +15,7 @@ export interface EditorForm {
   filters: boolean;
   day_strip: boolean;
   day_navigation: boolean;
+  event_reel_enabled: boolean;
   llmvision_enabled: boolean;
   llmvision_non_camera: boolean;
   frigate_enabled: boolean;
@@ -38,6 +39,7 @@ export function configToForm(config: CardConfig): EditorForm {
     filters: n.filters,
     day_strip: n.dayStrip,
     day_navigation: n.dayNavigation,
+    event_reel_enabled: n.event_reel.enabled,
     llmvision_enabled: n.llmvision.enabled,
     llmvision_non_camera: n.llmvision.non_camera,
     frigate_enabled: n.frigate.enabled,
@@ -127,6 +129,12 @@ export function formToConfig(
   }
   const entities = (form.entities ?? []).map((id) => existing.get(id) ?? id);
   if (entities.length || "entities" in orig) out.entities = entities;
+
+  putProvider(
+    out,
+    "event_reel",
+    provider(original.event_reel, form.event_reel_enabled, {}, initial.event_reel),
+  );
 
   const llm = original.llmvision;
   putProvider(
