@@ -10,6 +10,7 @@ import {
   shiftDay,
   zonedToEpoch,
 } from "../src/core/time";
+import { getLocalize } from "../src/i18n";
 import { iso } from "./helpers";
 
 const OSLO = "Europe/Oslo";
@@ -130,14 +131,39 @@ describe("time zones", () => {
       /02:16\s?PM/i,
     );
   });
+
+  it('takes the clock of the browser locale for the "system" time format', () => {
+    const t = iso("2026-10-08T14:16:26+02:00");
+    const opts = { timeZone: OSLO, timeFormat: "system" };
+    // English words with a Norwegian system clock: 24 hours, as HA shows it.
+    expect(formatTime(t, { ...opts, language: "en", systemLocale: "nb" })).toBe("14:16");
+    expect(formatTime(t, { ...opts, language: "nb", systemLocale: "en-US" })).toMatch(
+      /^02:16\s?p\.\s?m\.$/,
+    );
+    // "language" keeps the clock of the HA language.
+    expect(
+      formatTime(t, { language: "en", timeZone: OSLO, timeFormat: "language", systemLocale: "nb" }),
+    ).toMatch(/02:16\s?PM/i);
+  });
 });
 
 describe("formatDuration", () => {
   it("formats seconds, minutes and hours", () => {
-    expect(formatDuration(49)).toBe("49s");
-    expect(formatDuration(130)).toBe("2m 10s");
-    expect(formatDuration(120)).toBe("2m");
-    expect(formatDuration(3900)).toBe("1h 5m");
+    const en = getLocalize("en");
+    expect(formatDuration(49, en)).toBe("49s");
+    expect(formatDuration(130, en)).toBe("2m 10s");
+    expect(formatDuration(120, en)).toBe("2m");
+    expect(formatDuration(3900, en)).toBe("1h 5m");
+    expect(formatDuration(7200, en)).toBe("2h");
+  });
+
+  it("uses Norwegian units in Norwegian", () => {
+    const nb = getLocalize("nb");
+    expect(formatDuration(49, nb)).toBe("49 s");
+    expect(formatDuration(130, nb)).toBe("2 min 10 s");
+    expect(formatDuration(120, nb)).toBe("2 min");
+    expect(formatDuration(3900, nb)).toBe("1 t 5 min");
+    expect(formatDuration(7200, nb)).toBe("2 t");
   });
 });
 

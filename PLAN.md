@@ -199,8 +199,15 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
 - Physical and keypad changes carry no `context_*`. `context_user_id` is a user id.
   Names need the admin-only `config/auth/list`, so show an actor only when it is cheap:
   - an attribute such as a lock's `changed_by` (needs `history/history_during_period`
-    with attributes for that entity, **verify**), or
+    with attributes for that entity; verified, §9 S5), or
   - the friendly name of `context_entity_id` (the automation or script).
+- Verified on the reference install (2026-10-11): history rows come sorted by `lu`, a
+  change's row has `lu` equal to the logbook `when`, and the first row is the state at
+  `start_time` with `lu` set to `start_time`. During a bounce the attribute of each change
+  is on its own row, so the actor comes from the change's row and the attribute-only rows
+  after it, up to the next state change. The card asks only for changes without a final
+  answer (§12), from 2 s before to 5 s after them, and doesn't hold the rows back more than
+  3 s for it.
 - Drop transitions from or to `unknown`/`unavailable` (restart noise) and attribute-only
   updates.
 - Locks can bounce (unlocked → locked → unlocked within seconds, seen in real data).
@@ -595,7 +602,8 @@ a compact view.
   `grouping.window` (default 120 s) collapse into one row. The row shows a chain of
   states ("Front door: unlocked · opened · closed · locked"), the time range and a
   count. A burst can mix entities (a lock and a door). Presence changes stay separate
-  rows.
+  rows, and so do events with a description (AI events without a camera), since a
+  burst step shows only a label.
 - **Bounces:** the same entity flipping back and forth within 10 s collapses into its
   last state, with "×n".
 - **Camera groups:** consecutive events on the same camera within the window collapse
@@ -966,3 +974,35 @@ URL cache, the clip end for ongoing reviews (now + padding instead of now − 5 
 unverified), and the empty-state lookup ignoring LLM Vision `categories` and
 `show_unmatched: false`. The UI fixes were checked in the dev harness, including
 `?slow=nest:hang` and `?slow=nest:5`, and the minified file was loaded in a browser.
+
+**2026-10-11, improvement review of 0.2.1.** GPT-6-astra (xhigh) looked for improvements
+across the code; Claude (Opus 5.5) checked each finding. Fixed:
+- Camera group children are keyed by event id, so an open clip keeps its player when a
+  newer event joins the group (checked in the dev harness: the old code replaced it).
+- An actor no longer comes from the next change of a bouncing lock: the lookup stops at
+  the next state change (§2.4). Live data showed 3 of 5 changes in one bounce with the
+  wrong actor before.
+- The actor lookup (`ActorResolver`) waits at most 3 s, remembers actors per attribute and
+  change, and asks only for changes without a final answer; a late answer with new actors
+  asks for a refetch. An answer is final when the change was at least 30 s old as the
+  history was read, since the attribute may arrive after the state. Only the attribute
+  counts (the logbook's automation name stays a fallback), a newer lookup wins over an
+  older one, and a lookup that hangs or is no longer needed stops holding back new ones.
+- Events with a description stay out of bursts, where only a label shows (§5.3).
+- `time_format: system` takes the clock of the browser's locale, as HA does.
+- The browser time zone is read once instead of once per timestamp.
+- Durations come from i18n (`duration.*`).
+
+GPT-6-astra and a fresh Claude (Opus 5.5) context then reviewed the diff. The resolver's
+bookkeeping above came out of that review (finality, attribute-only answers, newer lookups
+winning, pruning), and a live row's actor now carries over to the fetched row while its
+lookup hasn't answered. Not changed: finality compares server change times with the
+browser clock, so a clock more than about 30 s fast can make an early answer final; the
+same skew already shifts the live range.
+
+Not changed (low priority): `frigate.cameras` with an alias pointing from a Frigate camera
+to another camera, retrying a failed Frigate subscription (polling covers it), push
+refreshes while the page is hidden, a constant `getCardSize()`, no warning for an
+explicit `nest: true` without Nest, and eager loading of `*.local.json` fixtures in the
+dev harness. Suggested features: an unreviewed-only filter and a notice when
+`max_events` cuts rows.

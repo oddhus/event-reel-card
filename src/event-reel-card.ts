@@ -19,6 +19,7 @@ import { MediaResolver } from "./core/media";
 import { mergeEvents } from "./core/merge";
 import { nearestItem, stripModel, timeAt } from "./core/strip";
 import {
+  browserTimeZone,
   computeRange,
   dayKey,
   dayRange,
@@ -32,7 +33,7 @@ import type { TimeFormatOptions } from "./core/time";
 import type { Category } from "./types";
 import type { HomeAssistant } from "./ha-types";
 import { getLocalize, objectLabel, resolveLanguage } from "./i18n";
-import { entityProvider, latestEntityChangeBefore } from "./providers/entity";
+import { createEntityProvider, latestEntityChangeBefore } from "./providers/entity";
 import { frigateProvider, latestReviewBefore, markReviewed } from "./providers/frigate";
 import {
   createLlmVisionProvider,
@@ -131,7 +132,8 @@ export class EventReelCard extends LitElement {
   private _live: ReelEvent[] = [];
   private _range?: TimeRange;
   private _resolver = new MediaResolver(() => this._hass);
-  private _providers: Provider[] = [entityProvider, createLlmVisionProvider(), frigateProvider];
+  private _entity = createEntityProvider();
+  private _providers: Provider[] = [this._entity, createLlmVisionProvider(), frigateProvider];
   private _localize: Localize = getLocalize("en");
   private _language = "en";
   private _started = false;
@@ -223,7 +225,7 @@ export class EventReelCard extends LitElement {
     if (prev.entities !== hass.entities) this._cameras = undefined;
 
     const ctx = this._ctx();
-    const live = entityProvider.live!(prev, hass, ctx);
+    const live = this._entity.live!(prev, hass, ctx);
     if (live.length) {
       this._live = [...this._live, ...live];
       this._recompute();
@@ -345,9 +347,9 @@ export class EventReelCard extends LitElement {
   }
 
   private _tz(): string {
-    const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (this._hass?.locale?.time_zone === "local") return browser;
-    return this._hass?.config?.time_zone || browser;
+    const server = this._hass?.config?.time_zone;
+    if (this._hass?.locale?.time_zone === "local" || !server) return browserTimeZone();
+    return server;
   }
 
   private _timeOpts(): TimeFormatOptions {
@@ -426,9 +428,12 @@ export class EventReelCard extends LitElement {
     this._setError(type, undefined);
     // Keep live events until the logbook has them (the recorder commits with a delay).
     if (type === "entity" && !this._day) {
-      this._live = this._live.filter(
-        (e) => e.start > range.end - LIVE_GRACE && !events.some((f) => sameChange(e, f)),
-      );
+      this._live = this._live.filter((e) => {
+        const fetched = events.find((f) => sameChange(e, f));
+        // A slow actor lookup may not have answered yet: keep the actor the live row showed.
+        if (fetched && !fetched.actor && e.actor) fetched.actor = e.actor;
+        return e.start > range.end - LIVE_GRACE && !fetched;
+      });
     }
   }
 
@@ -846,7 +851,7 @@ export class EventReelCard extends LitElement {
     const cam = this._cameraName(e);
     if (cam) parts.push(cam);
     if (e.end !== undefined && e.end > e.start && (e.camera || e.frigate)) {
-      parts.push(formatDuration(e.end - e.start));
+      parts.push(formatDuration(e.end - e.start, t));
     } else if (e.frigate && e.end === undefined) {
       parts.push(t("meta.ongoing"));
     }
@@ -1090,7 +1095,12 @@ export class EventReelCard extends LitElement {
       ${
         open
           ? html`<div class="children">
-              ${[...item.events].reverse().map((e) => html`<div class="child">${this._eventRow(e)}</div>`)}
+              ${repeat(
+                // Keyed, so an open clip keeps playing when a newer event joins the group.
+                [...item.events].reverse(),
+                (e) => e.id,
+                (e) => html`<div class="child">${this._eventRow(e)}</div>`,
+              )}
             </div>`
           : nothing
       }

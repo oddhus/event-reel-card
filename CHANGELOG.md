@@ -7,9 +7,26 @@ All notable changes to this project are documented here. The project uses
 
 ### Changed
 
+- Durations are translated: Norwegian shows `1 t 5 min` instead of `1h 5m`.
+- Who changed a lock (`actor_attribute`) is looked up only for new changes, in the history
+  around them, instead of the whole range with attributes on every refresh.
 - The card file starts with the license texts of the code it bundles, as those licenses
   require: Lit, hls.js, and the eventemitter3, url-toolkit and SVTA Common Media Library
   code inside hls.js. Earlier builds left them out. This adds about 15 KB (5 KB gzipped).
+
+### Fixed
+
+- An open clip in a camera group keeps playing when a newer event joins the group. Before,
+  the clip started over in a new player.
+- A lock that bounces no longer gives a change the actor of the next one: unlocked by Alex,
+  locked, unlocked by Sam showed Sam for both unlocks.
+- Door, lock and presence rows wait at most 3 seconds for the actor lookup. After that they
+  show without it, and the actor appears when the lookup answers; before, a lookup that
+  never answered left the rows "unavailable".
+- LLM Vision events with a description (from `llmvision.create_event`) keep their own row
+  instead of joining a burst of door changes, where the description couldn't be read.
+- With the "system" time format in your Home Assistant profile, times follow the clock of
+  your device's locale, as Home Assistant does. Before, they followed the language.
 
 ## [0.2.1] - 2026-10-11
 

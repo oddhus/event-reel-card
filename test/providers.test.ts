@@ -2,14 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { normalizeConfig } from "../src/config";
 import { buildCameraRegistry } from "../src/core/cameras";
 import { getLocalize } from "../src/i18n";
-import { applyActors, logbookToEvents } from "../src/providers/entity";
+import {
+  ActorResolver,
+  applyActors,
+  createEntityProvider,
+  logbookToEvents,
+} from "../src/providers/entity";
 import type { EntityHelpers } from "../src/providers/entity";
 import { parseWsResult, reviewToEvent } from "../src/providers/frigate";
 import type { FrigateReview } from "../src/providers/frigate";
 import { createLlmVisionProvider, llmvisionToEvents } from "../src/providers/llmvision";
 import { NestTokenResolver } from "../src/providers/nest";
-import type { HassEntity } from "../src/ha-types";
-import { iso } from "./helpers";
+import type { HassEntity, HomeAssistant } from "../src/ha-types";
+import { ev, iso } from "./helpers";
 
 const state = (entity_id: string, attributes: Record<string, unknown> = {}): HassEntity => ({
   entity_id,
@@ -144,6 +149,416 @@ describe("applyActors", () => {
       () => "changed_by",
     );
     expect(events.map((e) => e.actor)).toEqual(["Keypad 2", "One-touch"]);
+  });
+
+  it("doesn't give a change the actor of the next change of a bouncing lock", () => {
+    const events = logbookToEvents(
+      [
+        { when: 100, entity_id: "lock.front_door", state: "unlocked" },
+        { when: 101, entity_id: "lock.front_door", state: "locked" },
+        { when: 102, entity_id: "lock.front_door", state: "unlocked" },
+      ],
+      [{ entity: "lock.front_door", actor_attribute: "changed_by" }],
+      {
+        name: (id) => id,
+        stateLabel: (_i, s) => s,
+        deviceClass: () => undefined,
+        contextName: () => undefined,
+      },
+    );
+    applyActors(
+      events,
+      {
+        "lock.front_door": [
+          { s: "unlocked", a: { changed_by: "Alex" }, lu: 100 },
+          { s: "locked", a: { changed_by: "Keypad" }, lu: 101 },
+          { s: "unlocked", a: { changed_by: null }, lu: 102 },
+          { s: "unlocked", a: { changed_by: "Sam" }, lu: 103 },
+        ],
+      },
+      () => "changed_by",
+    );
+    expect(events.map((e) => e.actor)).toEqual(["Alex", "Keypad", "Sam"]);
+  });
+});
+
+describe("ActorResolver", () => {
+  const change = (start: number, state = "unlocked") =>
+    ev({
+      id: `entity:lock.front_door:${start}`,
+      start,
+      state,
+      entityId: "lock.front_door",
+      category: "lock",
+      title: "Front door",
+    });
+  const changedBy = () => "changed_by";
+  type Msg = { start_time: string; end_time: string; entity_ids: string[] };
+
+  it("looks up only changes it hasn't seen, in the history around them", async () => {
+    const callWS = vi.fn(async (_msg: Msg) => ({
+      "lock.front_door": [
+        { s: "unlocked", a: { changed_by: "Alex" }, lu: 100 },
+        { s: "locked", a: { changed_by: "Sam" }, lu: 5000 },
+      ],
+    }));
+    const hass = { callWS } as unknown as HomeAssistant;
+    const resolver = new ActorResolver(() => 10_000);
+
+    const first = [change(100)];
+    await resolver.fill(hass, first, changedBy);
+    expect(first[0].actor).toBe("Alex");
+    expect(callWS).toHaveBeenCalledTimes(1);
+    expect(callWS.mock.calls[0][0]).toMatchObject({
+      start_time: "1970-01-01T00:01:38.000Z",
+      end_time: "1970-01-01T00:01:45.000Z",
+      entity_ids: ["lock.front_door"],
+    });
+
+    const second = [change(100), change(5000, "locked")];
+    await resolver.fill(hass, second, changedBy);
+    expect(second.map((e) => e.actor)).toEqual(["Alex", "Sam"]);
+    expect(callWS).toHaveBeenCalledTimes(2);
+    expect(callWS.mock.calls[1][0]).toMatchObject({
+      start_time: "1970-01-01T01:23:18.000Z",
+      end_time: "1970-01-01T01:23:25.000Z",
+    });
+
+    await resolver.fill(hass, [change(100), change(5000, "locked")], changedBy);
+    expect(callWS).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks again for a recent change without an actor, but not for an old one", async () => {
+    let rows: { s: string; a: { changed_by: string | null }; lu: number }[] = [
+      { s: "locked", a: { changed_by: null }, lu: 500 },
+      { s: "unlocked", a: { changed_by: null }, lu: 990 },
+    ];
+    const callWS = vi.fn(async (_msg: Msg) => ({ "lock.front_door": rows }));
+    const hass = { callWS } as unknown as HomeAssistant;
+    const resolver = new ActorResolver(() => 1000);
+
+    const first = [change(500, "locked"), change(990)];
+    await resolver.fill(hass, first, changedBy);
+    expect(first.map((e) => e.actor)).toEqual([undefined, undefined]);
+
+    // The attribute update for the change 10 s ago reached the recorder after the change.
+    rows = [
+      { s: "locked", a: { changed_by: null }, lu: 500 },
+      { s: "unlocked", a: { changed_by: null }, lu: 990 },
+      { s: "unlocked", a: { changed_by: "Alex" }, lu: 991 },
+    ];
+    const second = [change(500, "locked"), change(990)];
+    await resolver.fill(hass, second, changedBy);
+    expect(second.map((e) => e.actor)).toEqual([undefined, "Alex"]);
+    expect(callWS).toHaveBeenCalledTimes(2);
+    expect(callWS.mock.calls[1][0]).toMatchObject({
+      start_time: "1970-01-01T00:16:28.000Z",
+      end_time: "1970-01-01T00:16:35.000Z",
+    });
+  });
+
+  it("waits for a hanging lookup only until it is stale, then asks again", async () => {
+    vi.useFakeTimers();
+    try {
+      let now = 10_000;
+      const rows = { "lock.front_door": [{ s: "unlocked", a: { changed_by: "Alex" }, lu: 100 }] };
+      const callWS = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise(() => undefined))
+        .mockResolvedValue(rows);
+      const hass = { callWS } as unknown as HomeAssistant;
+      const resolver = new ActorResolver(() => now);
+
+      const first = [change(100)];
+      const p1 = resolver.fill(hass, first, changedBy, 3000);
+      await vi.advanceTimersByTimeAsync(3000);
+      await p1;
+      expect(first[0].actor).toBeUndefined();
+
+      now += 10; // the first lookup may still answer: don't send another yet
+      const p2 = resolver.fill(hass, [change(100)], changedBy, 3000);
+      await vi.advanceTimersByTimeAsync(3000);
+      await p2;
+      expect(callWS).toHaveBeenCalledTimes(1);
+
+      now += 30;
+      const third = [change(100)];
+      await resolver.fill(hass, third, changedBy, 3000);
+      expect(callWS).toHaveBeenCalledTimes(2);
+      expect(third[0].actor).toBe("Alex");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("doesn't let a stale lookup that answers late erase a newer actor", async () => {
+    vi.useFakeTimers();
+    try {
+      let now = 10_000;
+      let answerOld!: (v: unknown) => void;
+      const callWS = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((r) => (answerOld = r)))
+        .mockResolvedValue({
+          "lock.front_door": [{ s: "unlocked", a: { changed_by: "Alex" }, lu: 100 }],
+        });
+      const hass = { callWS } as unknown as HomeAssistant;
+      const resolver = new ActorResolver(() => now);
+
+      const p1 = resolver.fill(hass, [change(100)], changedBy, 3000);
+      await vi.advanceTimersByTimeAsync(3000);
+      await p1;
+      now += 31;
+      const second = [change(100)];
+      await resolver.fill(hass, second, changedBy, 3000);
+      expect(second[0].actor).toBe("Alex");
+
+      answerOld({ "lock.front_door": [{ s: "unlocked", a: { changed_by: null }, lu: 100 }] });
+      await vi.advanceTimersByTimeAsync(0);
+      const third = [change(100)];
+      await resolver.fill(hass, third, changedBy, 3000);
+      expect(third[0].actor).toBe("Alex");
+      expect(callWS).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks again when the history was read before the change had settled", async () => {
+    let now = 101;
+    let answer!: (v: unknown) => void;
+    const callWS = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((r) => (answer = r)))
+      .mockResolvedValue({
+        "lock.front_door": [
+          { s: "unlocked", a: { changed_by: null }, lu: 100 },
+          { s: "unlocked", a: { changed_by: "Alex" }, lu: 103 },
+        ],
+      });
+    const hass = { callWS } as unknown as HomeAssistant;
+    const resolver = new ActorResolver(() => now);
+
+    const first = resolver.fill(hass, [change(100)], changedBy);
+    // Read at 101, before the attribute update at 103; the answer arrives much later.
+    now = 140;
+    answer({ "lock.front_door": [{ s: "unlocked", a: { changed_by: null }, lu: 100 }] });
+    await first;
+    const second = [change(100)];
+    await resolver.fill(hass, second, changedBy);
+    expect(second[0].actor).toBe("Alex");
+    expect(callWS).toHaveBeenCalledTimes(2);
+  });
+
+  it("corrects an actor read before the attribute caught up", async () => {
+    let now = 1000;
+    const callWS = vi
+      .fn()
+      .mockResolvedValueOnce({
+        // The new state still carries the previous change's attribute.
+        "lock.front_door": [{ s: "unlocked", a: { changed_by: "Keypad" }, lu: 995 }],
+      })
+      .mockResolvedValue({
+        "lock.front_door": [
+          { s: "unlocked", a: { changed_by: "Keypad" }, lu: 995 },
+          { s: "unlocked", a: { changed_by: "Alex" }, lu: 996 },
+        ],
+      });
+    const hass = { callWS } as unknown as HomeAssistant;
+    const resolver = new ActorResolver(() => now);
+
+    const first = [change(995)];
+    await resolver.fill(hass, first, changedBy);
+    expect(first[0].actor).toBe("Keypad");
+    now = 1060;
+    const second = [change(995)];
+    await resolver.fill(hass, second, changedBy);
+    expect(second[0].actor).toBe("Alex");
+    now = 1120;
+    await resolver.fill(hass, [change(995)], changedBy);
+    expect(callWS).toHaveBeenCalledTimes(2); // read after it settled: final
+  });
+
+  it("keeps the logbook's actor when the attribute names nobody, without caching it as the attribute", async () => {
+    let now = 1000;
+    const callWS = vi
+      .fn()
+      .mockResolvedValueOnce({
+        "lock.front_door": [{ s: "unlocked", a: { changed_by: null }, lu: 990 }],
+      })
+      .mockResolvedValue({
+        "lock.front_door": [
+          { s: "unlocked", a: { changed_by: null }, lu: 990 },
+          { s: "unlocked", a: { changed_by: "Alex" }, lu: 991 },
+        ],
+      });
+    const hass = { callWS } as unknown as HomeAssistant;
+    const resolver = new ActorResolver(() => now);
+    const byAutomation = () => ({ ...change(990), actor: "Night routine" });
+
+    const first = [byAutomation()];
+    await resolver.fill(hass, first, changedBy);
+    expect(first[0].actor).toBe("Night routine");
+    now = 1060;
+    const second = [byAutomation()];
+    await resolver.fill(hass, second, changedBy);
+    expect(second[0].actor).toBe("Alex");
+  });
+
+  it("doesn't wait for a lookup made for a range that is no longer shown", async () => {
+    vi.useFakeTimers();
+    try {
+      const callWS = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise(() => undefined))
+        .mockResolvedValue({
+          "lock.front_door": [
+            { s: "unlocked", a: { changed_by: "Alex" }, lu: 100 },
+            { s: "locked", a: { changed_by: "Sam" }, lu: 90_000 },
+          ],
+        });
+      const hass = { callWS } as unknown as HomeAssistant;
+      const resolver = new ActorResolver(() => 100_000);
+
+      const today = resolver.fill(hass, [change(100)], changedBy, 3000);
+      await vi.advanceTimersByTimeAsync(3000);
+      await today;
+      const otherDay = [change(90_000, "locked")];
+      await resolver.fill(hass, otherDay, changedBy, 3000);
+      expect(otherDay[0].actor).toBe("Sam");
+      // Back to the first range within seconds: ask again instead of waiting for the hang.
+      const back = [change(100)];
+      await resolver.fill(hass, back, changedBy, 3000);
+      expect(back[0].actor).toBe("Alex");
+      expect(callWS).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("looks up again when the actor attribute changes", async () => {
+    const callWS = vi.fn(async (_msg: Msg) => ({
+      "lock.front_door": [{ s: "unlocked", a: { changed_by: "Alex", method: "Keypad" }, lu: 100 }],
+    }));
+    const hass = { callWS } as unknown as HomeAssistant;
+    const resolver = new ActorResolver(() => 10_000);
+
+    const first = [change(100)];
+    await resolver.fill(hass, first, changedBy);
+    const second = [change(100)];
+    await resolver.fill(hass, second, () => "method");
+    expect([first[0].actor, second[0].actor]).toEqual(["Alex", "Keypad"]);
+    expect(callWS).toHaveBeenCalledTimes(2);
+  });
+
+  it("tries a failed lookup again on the next fill", async () => {
+    const callWS = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("history unavailable"))
+      .mockResolvedValue({
+        "lock.front_door": [{ s: "unlocked", a: { changed_by: "Alex" }, lu: 100 }],
+      });
+    const hass = { callWS } as unknown as HomeAssistant;
+    const resolver = new ActorResolver(() => 10_000);
+
+    const first = [change(100)];
+    await resolver.fill(hass, first, changedBy);
+    expect(first[0].actor).toBeUndefined();
+    const second = [change(100)];
+    await resolver.fill(hass, second, changedBy);
+    expect(second[0].actor).toBe("Alex");
+  });
+});
+
+describe("Entity fetch", () => {
+  const when = iso("2026-10-08T14:16:26+02:00");
+  const range = { start: iso("2026-10-08T00:00:00+02:00"), end: iso("2026-10-09T00:00:00+02:00") };
+  const ctxFor = (callWS: (msg: Record<string, unknown>) => Promise<unknown>) => ({
+    hass: { config: { time_zone: "Europe/Oslo" }, states: {}, callWS } as never,
+    config: normalizeConfig({
+      type: "x",
+      entities: [{ entity: "lock.front_door", name: "Front door", actor_attribute: "changed_by" }],
+    }),
+    cameras,
+    localize: getLocalize("en"),
+    now: iso("2026-10-08T15:00:00+02:00"),
+  });
+
+  it("returns its rows without waiting for an actor lookup that hangs", async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = ctxFor(
+        async (msg) =>
+          msg.type === "logbook/get_events"
+            ? [{ when, entity_id: "lock.front_door", state: "unlocked" }]
+            : new Promise(() => undefined), // history/history_during_period never answers
+      );
+      const events = createEntityProvider(new ActorResolver()).fetch(range, ctx);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect((await events).map((e) => [e.title, e.state, e.actor])).toEqual([
+        ["Front door", "unlocked", undefined],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks for a refetch when a slow actor lookup answers, and then shows the actor", async () => {
+    vi.useFakeTimers();
+    try {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const history = vi.fn(async () => {
+        await gate;
+        return { "lock.front_door": [{ s: "unlocked", a: { changed_by: "Alex" }, lu: when }] };
+      });
+      const ctx = ctxFor(async (msg) =>
+        msg.type === "logbook/get_events"
+          ? [{ when, entity_id: "lock.front_door", state: "unlocked" }]
+          : history(),
+      );
+      const provider = createEntityProvider(new ActorResolver());
+      const refetch = vi.fn();
+      const unsubscribe = provider.subscribe!(ctx, refetch);
+
+      const first = provider.fetch(range, ctx);
+      await vi.advanceTimersByTimeAsync(3000);
+      const [shown] = await first;
+      expect(shown.actor).toBeUndefined();
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(refetch).toHaveBeenCalledTimes(1);
+      expect(shown.actor).toBeUndefined(); // rows already returned stay as they were
+
+      const [again] = await provider.fetch(range, ctx);
+      expect(again.actor).toBe("Alex");
+      expect(history).toHaveBeenCalledTimes(1);
+      expect(refetch).toHaveBeenCalledTimes(1);
+      unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("doesn't ask for a refetch when the actor lookup answers in time", async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = ctxFor(async (msg) =>
+        msg.type === "logbook/get_events"
+          ? [{ when, entity_id: "lock.front_door", state: "unlocked" }]
+          : { "lock.front_door": [{ s: "unlocked", a: { changed_by: "Alex" }, lu: when }] },
+      );
+      const provider = createEntityProvider(new ActorResolver());
+      const refetch = vi.fn();
+      const unsubscribe = provider.subscribe!(ctx, refetch);
+      const [row] = await provider.fetch(range, ctx);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(row.actor).toBe("Alex");
+      expect(refetch).not.toHaveBeenCalled();
+      unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
