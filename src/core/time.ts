@@ -2,15 +2,21 @@ import type { TimeRange } from "../types";
 
 export type RangeSpec = { kind: "rolling"; hours: number } | { kind: "today" };
 
-/** Parses `24h`, `12`, `today`. Unknown values fall back to a rolling 24 h. */
-export function parseRange(value: unknown): RangeSpec {
-  if (value === "today") return { kind: "today" };
+/** Parses `24h`, `12`, `today`; undefined when the value isn't a range. */
+export function parseRangeStrict(value: unknown): RangeSpec | undefined {
   if (typeof value === "number" && value > 0) return { kind: "rolling", hours: value };
   if (typeof value === "string") {
-    const m = /^(\d+(?:\.\d+)?)\s*h?$/i.exec(value.trim());
+    const v = value.trim();
+    if (v === "today") return { kind: "today" };
+    const m = /^(\d+(?:\.\d+)?)\s*h?$/i.exec(v);
     if (m && Number(m[1]) > 0) return { kind: "rolling", hours: Number(m[1]) };
   }
-  return { kind: "rolling", hours: 24 };
+  return undefined;
+}
+
+/** Parses `24h`, `12`, `today`. Unknown values fall back to a rolling 24 h. */
+export function parseRange(value: unknown): RangeSpec {
+  return parseRangeStrict(value) ?? { kind: "rolling", hours: 24 };
 }
 
 interface ZonedParts {
@@ -75,11 +81,8 @@ export function zonedToEpoch(p: ZonedParts, timeZone: string): number {
 
 export function computeRange(spec: RangeSpec, now: number, timeZone: string): TimeRange {
   if (spec.kind === "today") {
-    const p = zonedParts(now, timeZone);
-    return {
-      start: zonedToEpoch({ ...p, hour: 0, minute: 0, second: 0 }, timeZone),
-      end: now,
-    };
+    // The same boundary as day navigation, which handles DST skipping midnight.
+    return { start: dayRange(dayKey(now, timeZone), timeZone).start, end: now };
   }
   return { start: now - spec.hours * 3600, end: now };
 }

@@ -1,12 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { normalizeConfig } from "../src/config";
 import { buildCameraRegistry } from "../src/core/cameras";
 import { getLocalize } from "../src/i18n";
 import { applyActors, logbookToEvents } from "../src/providers/entity";
 import type { EntityHelpers } from "../src/providers/entity";
 import { parseWsResult, reviewToEvent } from "../src/providers/frigate";
 import type { FrigateReview } from "../src/providers/frigate";
-import { llmvisionToEvents } from "../src/providers/llmvision";
+import { createLlmVisionProvider, llmvisionToEvents } from "../src/providers/llmvision";
+import { NestTokenResolver } from "../src/providers/nest";
 import type { HassEntity } from "../src/ha-types";
+import { iso } from "./helpers";
 
 const state = (entity_id: string, attributes: Record<string, unknown> = {}): HassEntity => ({
   entity_id,
@@ -210,6 +213,100 @@ describe("llmvisionToEvents", () => {
     const raw = [{ ...base, uid: "d", camera_name: "", label: "lock" }];
     expect(llmvisionToEvents(raw, ctx)[0].category).toBe("lock");
     expect(llmvisionToEvents(raw, { ...ctx, nonCamera: false })).toEqual([]);
+  });
+});
+
+describe("LLM Vision fetch", () => {
+  it("returns its events without waiting for a Nest lookup that hangs", async () => {
+    vi.useFakeTimers();
+    try {
+      const token = btoa(JSON.stringify(["1700000000", "1234567890"]));
+      const start = "2026-10-08T14:16:26+02:00";
+      const hass = {
+        config: { time_zone: "Europe/Oslo" },
+        states: {},
+        callWS: async (msg: Record<string, unknown>) =>
+          msg.type === "call_service"
+            ? {
+                response: {
+                  events: [
+                    { uid: "door", start, title: "At the door", camera_name: token },
+                    { uid: "cam", start, title: "On the steps", camera_name: "camera.entrance" },
+                  ],
+                },
+              }
+            : new Promise(() => undefined), // media_source/browse_media never answers
+      };
+      const events = createLlmVisionProvider(new NestTokenResolver()).fetch(
+        { start: iso("2026-10-08T00:00:00+02:00"), end: iso("2026-10-09T00:00:00+02:00") },
+        {
+          hass: hass as never,
+          config: normalizeConfig({ type: "x" }),
+          cameras,
+          localize: getLocalize("en"),
+          now: iso("2026-10-08T15:00:00+02:00"),
+        },
+      );
+      await vi.advanceTimersByTimeAsync(3000);
+      const byId = new Map((await events).map((e) => [e.id, e]));
+      expect([...byId.keys()].sort()).toEqual(["llmvision:cam", "llmvision:door"]);
+      expect(byId.get("llmvision:cam")?.camera).toBe("camera.entrance");
+      // The doorbell row shows, still without its clip.
+      expect(byId.get("llmvision:door")).toMatchObject({ category: "doorbell", clip: undefined });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks for a refetch when a slow Nest lookup answers, and then joins the clip", async () => {
+    vi.useFakeTimers();
+    try {
+      const token = btoa(JSON.stringify(["1700000000", "1234567890"]));
+      const start = "2026-10-08T14:16:26+02:00";
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const hass = {
+        config: { time_zone: "Europe/Oslo" },
+        states: {},
+        callWS: async (msg: Record<string, unknown>) => {
+          if (msg.type === "call_service") {
+            return { response: { events: [{ uid: "door", start, camera_name: token }] } };
+          }
+          await gate;
+          return msg.media_content_id === "media-source://nest"
+            ? { children: [{ media_content_id: "media-source://nest/nest-1" }] }
+            : { children: [{ media_content_id: `media-source://nest/nest-1/${token}` }] };
+        },
+      };
+      const ctx = {
+        hass: hass as never,
+        config: normalizeConfig({ type: "x" }),
+        cameras,
+        localize: getLocalize("en"),
+        now: iso("2026-10-08T15:00:00+02:00"),
+      };
+      const range = {
+        start: iso("2026-10-08T00:00:00+02:00"),
+        end: iso("2026-10-09T00:00:00+02:00"),
+      };
+      const provider = createLlmVisionProvider(new NestTokenResolver());
+      const refetch = vi.fn();
+      const unsubscribe = provider.subscribe!(ctx, refetch);
+
+      const first = provider.fetch(range, ctx);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect((await first)[0].clip).toBeUndefined();
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(refetch).toHaveBeenCalledTimes(1);
+
+      const [again] = await provider.fetch(range, ctx);
+      expect(again.camera).toBe("camera.doorbell");
+      expect(again.clip?.path).toBe(`media-source://nest/nest-1/${token}`);
+      unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

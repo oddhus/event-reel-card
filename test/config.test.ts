@@ -49,4 +49,12 @@ describe("normalizeConfig", () => {
       /entity id/,
     );
   });
+
+  it("rejects a single entity given as a string instead of a list", () => {
+    expect(() => normalizeConfig({ type: "x", entities: "person.alex" as never })).toThrow(
+      /must be a list/,
+    );
+    // An empty `entities:` key (null in YAML) means no entities.
+    expect(normalizeConfig({ type: "x", entities: null as never }).entities).toEqual([]);
+  });
 });

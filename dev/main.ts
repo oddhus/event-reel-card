@@ -11,7 +11,7 @@ import type { WsHandler } from "./mock-hass";
 //   ?now=2026-10-08T21:00:00+02:00   pin the clock
 //   ?live=1                          real Frigate reviews and media through the Vite proxy (FRIGATE_URL)
 //   ?density=comfortable             row density
-//   ?slow=frigate:5,llmvision:hang   delay a source by seconds, or never answer
+//   ?slow=frigate:5,llmvision:hang   delay a source by seconds, or never answer (also: entity, nest)
 const params = new URLSearchParams(location.search);
 const pinned = params.get("now");
 if (pinned) {
@@ -162,6 +162,7 @@ const slowKeys: Record<string, string> = {
   entity: "logbook/get_events",
   llmvision: "call_service:llmvision.get_events",
   frigate: "frigate/reviews/get",
+  nest: "media_source/browse_media",
 };
 for (const part of (params.get("slow") ?? "").split(",").filter(Boolean)) {
   const [source, seconds] = part.split(":");

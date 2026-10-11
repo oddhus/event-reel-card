@@ -180,6 +180,12 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
 - Titles are `"<Type> @ <local timestamp>"` (Doorbell, Person, Motion…). Parsing time and
   type from a localized title is fragile, so the full Nest provider is P2. M1 only uses
   Nest to play clips for LLM Vision doorbell events joined by token.
+- The token lookup browses media source (the root, then one call per device). LLM Vision
+  waits at most 3 s for it, so a slow browse never holds back the AI events: doorbell rows
+  show without a clip, and when the browse answers, the provider's `subscribe` asks for a
+  refetch (also on a past day, which isn't polled). A failed browse keeps the tokens found
+  earlier. A browse with no answer after 60 s no longer blocks a new one, and only a browse
+  started after a token was asked for can mark it unknown (retried after 10 min).
 - Automations also get `trigger.event.data.attachment.video|image` (`/api/nest/event_media/...`).
 
 ### 2.4 Entities and logbook (HA core)
@@ -581,6 +587,7 @@ a compact view.
 
 - **Player** (16:9, full card width):
   - While the HLS clip loads, loop the preview (or show the still) in the player area.
+    With reduced motion or data saving, always the still.
   - Exact clip `[start - pad, end + pad]` over HLS, autoplay muted, controls,
     `playsinline`. For an ongoing review (`end_time: null`), end the range at now − 5 s.
   - Buttons for "−30 s / +30 s" to widen the window (sign a new VOD range) and for
@@ -904,3 +911,37 @@ Not changed: switching days shows "Loading…" instead of keeping the previous d
 up until the new day is ready, so rows never appear under the wrong date. The first-paint
 gate lives in the card and has no unit test; it was checked in the dev harness with
 `?slow=frigate:4` and `?slow=frigate:hang`.
+
+**2026-10-11, improvement review after 0.2.0.** GPT-6-astra (xhigh) and Claude (Opus 5.5)
+looked for improvements across the code. Fixed:
+- The editor's range check had lost its regex escapes, so only "today" passed. It now
+  uses the card's own range parser (`parseRangeStrict`).
+- LLM Vision waited for the Nest token lookup, and a browse that never answered blocked
+  it for good. The lookup now waits at most 3 s (§2.3).
+- The day strip keeps a cursor separate from the 2-second highlight, so arrow keys step
+  on after a pause and the slider value doesn't reset.
+- Reduced motion and data saving: the player shows the still while loading, not the
+  looping preview. `preview: hover` also plays on focus of the row (§5.5).
+- `range: today` takes its start from `dayRange`, which handles DST skipping midnight.
+- Previews drop URLs resolved for media they no longer show.
+- `entities` given as a string is rejected instead of read letter by letter.
+- The build minifies whitespace too (Vite keeps it for ES libraries): 603 → 478 KB.
+
+GPT-6-astra and a fresh Claude (Opus 5.5) context then reviewed that diff. Fixed:
+- A click or tap focuses the row too, so only `:focus-visible` counts as focus for hover
+  previews; a hovered or focused preview keeps playing when its media changes.
+- A late Nest answer asks for a refetch (`subscribe`); a failed browse keeps known
+  tokens; a browse started before a token was asked for doesn't mark it unknown.
+- The strip ignores a cursor whose row is gone, and a deep link moves the cursor.
+- Ranges are trimmed before parsing and stored trimmed by the editor.
+- While loading, the still stays under the preview video until it has a frame.
+- Player video listeners belong to one load (`AbortController`); they used to pile up
+  per ±30 s press.
+
+Not changed: the codec/unavailable fallback still autoplays the preview with reduced
+motion, since it replaces a clip the user opened (§5.5 covers thumbnails). Low priority
+and left for later: defensive parsing of malformed Frigate records, eviction in the media
+URL cache, the clip end for ongoing reviews (now + padding instead of now − 5 s, impact
+unverified), and the empty-state lookup ignoring LLM Vision `categories` and
+`show_unmatched: false`. The UI fixes were checked in the dev harness, including
+`?slow=nest:hang` and `?slow=nest:5`, and the minified file was loaded in a browser.

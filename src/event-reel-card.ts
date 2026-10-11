@@ -103,6 +103,7 @@ export class EventReelCard extends LitElement {
     _lastEarlier: { state: true },
     _day: { state: true },
     _partial: { state: true },
+    _stripCursor: { state: true },
   };
 
   declare _items: TimelineItem[];
@@ -120,6 +121,8 @@ export class EventReelCard extends LitElement {
   declare _day?: string;
   /** Some provider hasn't answered yet in this view. */
   declare _partial: boolean;
+  /** The row last picked on the day strip; unlike the highlight, it doesn't fade. */
+  declare _stripCursor?: string;
 
   private _hass?: HomeAssistant;
   private _cameras?: CameraRegistry;
@@ -508,6 +511,7 @@ export class EventReelCard extends LitElement {
     this._openId = undefined;
     this._openGroups = new Set();
     this._highlight = undefined;
+    this._stripCursor = undefined;
     this._linkedEvent = undefined;
     this._lastEarlier = undefined;
     this._hadItems = false;
@@ -707,6 +711,7 @@ export class EventReelCard extends LitElement {
     const reduced = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     row.scrollIntoView({ block: "center", behavior: reduced ? "auto" : behavior });
     this._highlight = id;
+    this._stripCursor = id; // the strip's arrow keys step on from the row shown last
     window.clearTimeout(this._highlightTimer);
     this._highlightTimer = window.setTimeout(() => (this._highlight = undefined), 2000);
   }
@@ -1213,6 +1218,7 @@ export class EventReelCard extends LitElement {
       .model=${model}
       .labels=${model.marks.map((m) => formatTime(m.epoch, opts))}
       .selected=${this._highlight}
+      .cursor=${this._stripCursor}
       .label=${this._localize("strip.label")}
       .valueText=${this._stripValueText(filtered)}
       .live=${!this._day}
@@ -1222,7 +1228,8 @@ export class EventReelCard extends LitElement {
   }
 
   private _stripValueText(items: TimelineItem[]): string {
-    const item = items.find((i) => i.id === this._highlight);
+    const id = this._stripCursor ?? this._highlight;
+    const item = items.find((i) => i.id === id);
     if (!item) return "";
     const e = itemEvents(item)[itemEvents(item).length - 1];
     return `${this._time(item.sortTime)} ${e.title}${e.stateLabel ? ` ${e.stateLabel}` : ""}`;

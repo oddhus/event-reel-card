@@ -8,7 +8,7 @@ import type HlsType from "hls.js/light";
 import { frigateMedia } from "../core/media";
 import type { MediaResolver } from "../core/media";
 import type { Localize, MediaRef, ReelEvent } from "../types";
-import "./preview";
+import { motionAllowed } from "./preview";
 
 type Status = "loading" | "playing" | "codec" | "deleted" | "unavailable";
 type FallbackStatus = Exclude<Status, "loading" | "playing">;
@@ -60,6 +60,8 @@ export class EventReelPlayer extends LitElement {
   declare _extra: [number, number];
 
   private hls?: HlsType;
+  /** Removes the video listeners of the current load (the element is reused for ±30 s). */
+  private listeners?: AbortController;
   private watchdog?: number;
   private startTimer?: number;
   private loadToken = 0;
@@ -127,7 +129,9 @@ export class EventReelPlayer extends LitElement {
     ];
   }
 
-  private stopTimers() {
+  private stopWatchdog() {
+    this.listeners?.abort();
+    this.listeners = undefined;
     window.clearTimeout(this.watchdog);
     window.clearInterval(this.startTimer);
     this.watchdog = undefined;
@@ -135,7 +139,7 @@ export class EventReelPlayer extends LitElement {
   }
 
   private teardown() {
-    this.stopTimers();
+    this.stopWatchdog();
     this.hls?.destroy();
     this.hls = undefined;
     const video = this.video;
@@ -249,9 +253,12 @@ export class EventReelPlayer extends LitElement {
   private armWatchdog(video: HTMLVideoElement, token: number, native: boolean) {
     this.startedAt = performance.now() / 1000;
     this.touch();
+    this.listeners?.abort();
+    this.listeners = new AbortController();
+    const { signal } = this.listeners;
     const activity = () => this.touch();
     for (const type of ["progress", "loadedmetadata", "loadeddata", "canplay"]) {
-      video.addEventListener(type, activity);
+      video.addEventListener(type, activity, { signal });
     }
 
     const idleLimit = native ? IDLE_LIMIT_NATIVE : IDLE_LIMIT_HLS;
@@ -283,7 +290,7 @@ export class EventReelPlayer extends LitElement {
         if (codec) this.blockCodec();
         void this.fallback(token, codec ? "codec" : "unavailable");
       },
-      { once: true },
+      { once: true, signal },
     );
 
     video.addEventListener(
@@ -305,7 +312,7 @@ export class EventReelPlayer extends LitElement {
           }
         }, WATCHDOG_MS);
       },
-      { once: true },
+      { once: true, signal },
     );
   }
 
@@ -326,7 +333,7 @@ export class EventReelPlayer extends LitElement {
 
   private async fallback(token: number, status: FallbackStatus) {
     if (!this.alive(token)) return;
-    this.stopTimers();
+    this.stopWatchdog();
     this.hls?.destroy();
     this.hls = undefined;
     this._status = status;
@@ -351,7 +358,8 @@ export class EventReelPlayer extends LitElement {
   private async preparePending(e: ReelEvent, token: number) {
     this._pendingUrl = undefined;
     const ref = e.preview?.[0];
-    if (!ref || !this.resolver) return;
+    // With reduced motion or data saving, the still stands in while the clip loads.
+    if (!ref || !this.resolver || !motionAllowed()) return;
     try {
       const url = await this.resolver.url(ref);
       if (this.alive(token)) this._pendingUrl = url;
@@ -429,6 +437,19 @@ export class EventReelPlayer extends LitElement {
           fallback
             ? this.renderFallback()
             : html`<video class="main" muted playsinline controls preload="auto"></video>`
+        }
+        ${
+          // While loading: the still, with the looping preview on top once it is ready (it
+          // stays transparent until its first frame, so the still shows through meanwhile).
+          this._status === "loading" && this.event.thumbnail?.length
+            ? html`<event-reel-preview
+                class="still pending"
+                .resolver=${this.resolver}
+                .thumbnail=${this.event.thumbnail}
+                mode="still"
+                aria-hidden="true"
+              ></event-reel-preview>`
+            : nothing
         }
         ${
           this._status === "loading" && this._pendingUrl

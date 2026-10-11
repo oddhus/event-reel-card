@@ -111,6 +111,10 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
   if (!config || typeof config !== "object") throw new Error("Invalid configuration");
 
   const entities: EntityConfig[] = [];
+  // A plain string would otherwise be read letter by letter.
+  if (config.entities != null && !Array.isArray(config.entities)) {
+    throw new Error("`entities` must be a list");
+  }
   for (const item of config.entities ?? []) {
     if (typeof item === "string") entities.push({ entity: item });
     else if (item && typeof item === "object" && typeof item.entity === "string")
