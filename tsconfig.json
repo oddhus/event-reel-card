@@ -13,9 +13,10 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "test", "dev", "*.ts"]
+  "include": ["src", "test", "dev", "build", "*.ts"]
 }

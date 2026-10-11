@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import pkg from "./package.json" with { type: "json" };
+import { bundledNotices, formatBanner } from "./build/third-party-notices.ts";
 
 export default defineConfig({
   define: {
@@ -17,7 +18,16 @@ export default defineConfig({
     rolldownOptions: {
       // HACS ships one file, so no extra chunks. Library mode keeps whitespace in ES output
       // (for tree-shaking by consumers); this file is the end product, so minify it fully.
-      output: { codeSplitting: false, minify: true },
+      // Minifying drops license comments, so the third-party notices go in after it.
+      output: {
+        codeSplitting: false,
+        minify: true,
+        postBanner: (chunk) =>
+          formatBanner(
+            `Event Reel Card ${pkg.version} (MIT). Bundled third-party code and its licenses:`,
+            bundledNotices(chunk),
+          ),
+      },
     },
   },
   test: {

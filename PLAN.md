@@ -238,6 +238,24 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
   provider parsers).
 - No runtime CDN imports. HA does not reliably share its own Lit with custom cards, so
   bundle it.
+- **License notices.** Lit (BSD-3-Clause) and hls.js (Apache-2.0) ask for their notices
+  in redistributed builds. The minifier drops Lit's `@license` comments (Vite turns
+  rolldown's legal comments off; `output.comments.legal` would bring back only Lit's
+  copyright and SPDX lines), and hls.js's dist has none. hls.js 1.7.3's light build also
+  inlines eventemitter3 (MIT), url-toolkit, `@svta/cml-id3` and `@svta/cml-utils` (all
+  Apache-2.0), which have no node_modules entry; its source map names them (`@svta/cml-cmcd`
+  is imported for types only). So `build/third-party-notices.ts` adds one `/*! */` banner
+  through rolldown's `postBanner` (after minifying), with the LICENSE file of each package
+  that has rendered code in the bundle plus the inlined ones from `build/licenses/` (copied
+  from their npm tarballs). Whitespace is collapsed and identical texts are merged. The
+  full Apache-2.0 terms, which url-toolkit's and SVTA's LICENSE files repeat, are printed
+  once at the end (Apache §4(a) asks for a copy of the license); each package keeps its
+  own copyright notice. None of these npm packages ships a NOTICE file. SVTA's repository
+  has one, but its attributions (SVTA's copyright, and the hls.js notice for code derived
+  from hls.js) are in the banner already. The build fails when a bundled package has no
+  LICENSE file, and a test checks the inlined list against hls.js's source map and pinned
+  versions. Vite's `build.license` collects the same texts, but into a separate file that
+  HACS wouldn't install. Cost with 0.2.0: 14.6 KB (4.9 KB gzipped).
 
 ### 3.2 Source layout
 
@@ -275,6 +293,9 @@ dev/
   fixtures/*.example.json   # anonymised; *.local.json is gitignored
 test/
   *.test.ts
+build/
+  third-party-notices.ts    # license banner of the built file (§3.1)
+  licenses/                 # LICENSE files of the packages hls.js inlines
 ```
 
 ### 3.3 Data model

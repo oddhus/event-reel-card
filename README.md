@@ -266,4 +266,6 @@ signed by Home Assistant and expire.
 
 ## License
 
-MIT
+MIT. The built `event-reel-card.js` also contains code from Lit (BSD-3-Clause), hls.js
+(Apache-2.0) and the packages hls.js includes. Their license texts are at the top of that
+file.

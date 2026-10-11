@@ -38,6 +38,11 @@ live install before relying on it, and record what you verified in PLAN.md §2.
 The runtime dependencies are `lit` and `hls.js`. Add another only for a clear gain: the
 whole card ships as one file to every dashboard that uses it. Prefer package versions
 that have been published for at least two weeks.
+The build puts the LICENSE file of every bundled package at the top of that file
+(`build/third-party-notices.ts`) and fails when one has none. When a dependency inlines
+other packages into its own dist, as hls.js does, list them in `INLINED` there with their
+LICENSE files from npm in `build/licenses/`. A test compares that list with hls.js's
+source map and pinned versions, so an hls.js update can fail it until you do.
 Keep `homeassistant` in `hacs.json` at the oldest HA version whose frontend APIs the card
 uses.
 
