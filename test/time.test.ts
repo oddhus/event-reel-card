@@ -56,6 +56,15 @@ describe("day navigation", () => {
     expect(dayRange("2026-09-05", santiago).end).toBe(iso("2026-09-06T04:00:00Z"));
     expect(dayRange("2026-09-05", santiago).start).toBe(iso("2026-09-05T04:00:00Z"));
   });
+
+  it("starts 'today' at the jump where DST skips midnight", () => {
+    const santiago = "America/Santiago";
+    const noon = iso("2026-09-06T12:00:00-03:00");
+    expect(computeRange({ kind: "today" }, noon, santiago)).toEqual({
+      start: iso("2026-09-06T04:00:00Z"), // 01:00 local, the first instant of the day
+      end: noon,
+    });
+  });
 });
 
 describe("parseRange", () => {

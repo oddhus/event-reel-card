@@ -15,8 +15,9 @@ export default defineConfig({
       fileName: () => "event-reel-card.js",
     },
     rolldownOptions: {
-      // HACS ships one file, so no extra chunks.
-      output: { codeSplitting: false },
+      // HACS ships one file, so no extra chunks. Library mode keeps whitespace in ES output
+      // (for tree-shaking by consumers); this file is the end product, so minify it fully.
+      output: { codeSplitting: false, minify: true },
     },
   },
   test: {

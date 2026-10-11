@@ -88,6 +88,12 @@ interface ServiceResponse {
   response?: { events?: LlmVisionEvent[] };
 }
 
+/**
+ * Milliseconds the events wait for the Nest lookup. A slower lookup must not hold back every
+ * AI event: doorbell rows show without their clip, which a later refresh fills in.
+ */
+const NEST_WAIT = 3000;
+
 export function createLlmVisionProvider(nest = new NestTokenResolver()): Provider {
   return {
     type: "llmvision",
@@ -119,7 +125,7 @@ export function createLlmVisionProvider(nest = new NestTokenResolver()): Provide
       let nestDevices = new Map<string, string>();
       if (tokens.length && ctx.config.nest.enabled) {
         try {
-          nestDevices = await nest.resolve(ctx.hass, tokens);
+          nestDevices = await nest.resolve(ctx.hass, tokens, NEST_WAIT);
         } catch (err) {
           console.debug("[event-reel] Nest lookup failed", err);
         }

@@ -3,6 +3,7 @@
 
 import { normalizeConfig } from "./config";
 import type { CardConfig, EntityConfig } from "./config";
+import { parseRangeStrict } from "./core/time";
 
 export interface EditorForm {
   title: string;
@@ -92,8 +93,7 @@ function putProvider(out: Obj, key: string, value: unknown) {
 
 /** A range the card understands: `today`, or a positive number of hours (`24`, `12h`). */
 export function isValidRange(value: string): boolean {
-  const v = value.trim();
-  return v === "today" || (/^d+(.d+)?s*h?$/i.test(v) && parseFloat(v) > 0);
+  return parseRangeStrict(value.trim()) !== undefined;
 }
 
 /**

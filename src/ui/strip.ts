@@ -13,6 +13,7 @@ export class EventReelStrip extends LitElement {
     model: { attribute: false },
     labels: { attribute: false },
     selected: {},
+    cursor: {},
     label: {},
     valueText: {},
     live: { type: Boolean },
@@ -21,8 +22,10 @@ export class EventReelStrip extends LitElement {
   declare model?: StripModel;
   /** Text for each mark, same order as model.marks. */
   declare labels?: string[];
-  /** Id of the highlighted tick. */
+  /** Id of the highlighted tick (fades after a moment). */
   declare selected?: string;
+  /** Id of the tick last picked here; arrow keys step on from it. */
+  declare cursor?: string;
   /** Accessible name of the slider. */
   declare label?: string;
   /** Spoken value: the time of the selected row. */
@@ -91,11 +94,15 @@ export class EventReelStrip extends LitElement {
     this.start = undefined;
   };
 
+  private get stepFrom(): string | undefined {
+    return this.cursor ?? this.selected;
+  }
+
   /** Arrow keys step through rows in time order; Home/End jump to the ends. */
   private onKey = (ev: KeyboardEvent) => {
     const ticks = [...(this.model?.ticks ?? [])].sort((a, b) => a.pos - b.pos);
     if (!ticks.length) return;
-    const current = ticks.findIndex((t) => t.id === this.selected);
+    const current = ticks.findIndex((t) => t.id === this.stepFrom);
     let next: number | undefined;
     if (ev.key === "ArrowRight" || ev.key === "ArrowUp") {
       next = current < 0 ? ticks.length - 1 : Math.min(ticks.length - 1, current + 1);
@@ -127,7 +134,7 @@ export class EventReelStrip extends LitElement {
         aria-label=${this.label ?? ""}
         aria-valuemin="0"
         aria-valuemax="100"
-        aria-valuenow=${Math.round((m.ticks.find((t) => t.id === this.selected)?.pos ?? 1) * 100)}
+        aria-valuenow=${Math.round((m.ticks.find((t) => t.id === this.stepFrom)?.pos ?? 1) * 100)}
         aria-valuetext=${this.valueText ?? ""}
         @keydown=${this.onKey}
         @pointerdown=${this.onDown}
@@ -147,7 +154,7 @@ export class EventReelStrip extends LitElement {
         ${m.ticks.map(
           (t) =>
             html`<span
-              class="tick ${t.id === this.selected ? "selected" : ""}"
+              class="tick ${t.id === this.selected ? "selected" : ""} ${t.id === this.cursor ? "cursor" : ""}"
               style="left:${t.pos * 100}%;--c:${CATEGORY_COLORS[t.category]}"
             ></span>`,
         )}
@@ -207,7 +214,8 @@ export class EventReelStrip extends LitElement {
       background: var(--c);
       opacity: 0.85;
     }
-    .tick.selected {
+    .tick.selected,
+    .bar:focus-visible .tick.cursor {
       top: 2px;
       bottom: 2px;
       width: 5px;

@@ -202,6 +202,17 @@ describe("M2 review fixes", () => {
     expect(formToConfig({ ...configToForm(base), range: "today" }, base).range).toBe("today");
   });
 
+  it("takes a range in hours picked or typed in the editor", () => {
+    const today: CardConfig = { type: "custom:event-reel-card", range: "today" };
+    const pick = (range: string) => formToConfig({ ...configToForm(today), range }, today).range;
+    expect(pick("12h")).toBe("12h");
+    expect(pick("48h")).toBe("48h");
+    expect(pick("6")).toBe("6");
+    expect(pick("1.5h")).toBe("1.5h");
+    // And back from "today" to the default.
+    expect(pick("24h")).toBe("24h");
+  });
+
   it("restores a custom severity list when 'alerts only' is switched off again", () => {
     const initial: CardConfig = {
       type: "custom:event-reel-card",

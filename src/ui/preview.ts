@@ -10,7 +10,8 @@ const MAX_PLAYING = 6;
 
 export type PreviewMode = "visible" | "hover" | "still" | "off";
 
-const motionAllowed = (): boolean => {
+/** False with reduced motion or data saving: show stills instead of looping video. */
+export const motionAllowed = (): boolean => {
   const reduced = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
     ?.saveData;
@@ -100,9 +101,14 @@ export class EventReelPreview extends LitElement {
 
   private visible = false;
   private hovered = false;
+  private focused = false;
+  /** The row the preview sits in; focusing it counts as hovering, for keyboard users. */
+  private focusHost?: HTMLElement;
   private stillIndex = 0;
   private retried = new Set<string>();
   private videoFailed = false;
+  /** Bumped when the media changes, so URLs resolved for the previous media are dropped. */
+  private gen = 0;
 
   constructor() {
     super();
@@ -115,6 +121,9 @@ export class EventReelPreview extends LitElement {
     coordinator.observe(this);
     this.addEventListener("pointerenter", this.onEnter);
     this.addEventListener("pointerleave", this.onLeave);
+    this.focusHost = this.closest<HTMLElement>("button, a[href], [tabindex]") ?? undefined;
+    this.focusHost?.addEventListener("focusin", this.onFocus);
+    this.focusHost?.addEventListener("focusout", this.onBlur);
   }
 
   override disconnectedCallback() {
@@ -122,6 +131,10 @@ export class EventReelPreview extends LitElement {
     coordinator.unobserve(this);
     this.removeEventListener("pointerenter", this.onEnter);
     this.removeEventListener("pointerleave", this.onLeave);
+    this.focusHost?.removeEventListener("focusin", this.onFocus);
+    this.focusHost?.removeEventListener("focusout", this.onBlur);
+    this.focusHost = undefined;
+    this.focused = false;
   }
 
   private mediaKey = "";
@@ -132,6 +145,7 @@ export class EventReelPreview extends LitElement {
     const key = [...(this.thumbnail ?? []), ...(this.preview ?? [])].map((r) => r.path).join("|");
     if (key === this.mediaKey) return;
     this.mediaKey = key;
+    this.gen++;
     this.stillIndex = 0;
     this.videoFailed = false;
     this.retried.clear();
@@ -149,7 +163,17 @@ export class EventReelPreview extends LitElement {
 
   private onLeave = () => {
     this.hovered = false;
-    if (this.mode === "hover") this.setPlaying(false);
+    if (this.mode === "hover" && !this.focused) this.setPlaying(false);
+  };
+
+  private onFocus = () => {
+    this.focused = true;
+    if (this.mode === "hover" && motionAllowed()) this.setPlaying(true);
+  };
+
+  private onBlur = () => {
+    this.focused = false;
+    if (this.mode === "hover" && !this.hovered) this.setPlaying(false);
   };
 
   setVisible(visible: boolean) {
@@ -165,7 +189,7 @@ export class EventReelPreview extends LitElement {
 
   setPlaying(playing: boolean) {
     if (playing && (this.mode === "still" || this.mode === "off" || this.videoFailed)) return;
-    if (playing && this.mode === "hover" && !this.hovered) return;
+    if (playing && this.mode === "hover" && !this.hovered && !this.focused) return;
     if (playing === this._playing) return;
     this._playing = playing;
     if (playing && !this._video) void this.loadVideo();
@@ -180,10 +204,12 @@ export class EventReelPreview extends LitElement {
     const list = this.thumbnail ?? [];
     const ref = list[this.stillIndex];
     if (!ref || !this.resolver || this.mode === "off") return;
+    const gen = this.gen;
     try {
-      this._still = await this.resolver.url(ref);
+      const url = await this.resolver.url(ref);
+      if (gen === this.gen) this._still = url;
     } catch {
-      this.nextStill();
+      if (gen === this.gen) this.nextStill();
     }
   }
 
@@ -196,12 +222,14 @@ export class EventReelPreview extends LitElement {
   private async onStillError() {
     const ref = this.thumbnail?.[this.stillIndex];
     const failed = this._still;
+    const gen = this.gen;
     if (ref && !this.retried.has(ref.path) && this.resolver) {
       // A signature may have expired: re-sign once before moving to the next still.
       this.retried.add(ref.path);
       this.resolver.invalidate(ref);
       try {
         const url = await this.resolver.url(ref);
+        if (gen !== this.gen) return;
         if (url !== failed) {
           this._still = url;
           return;
@@ -210,15 +238,18 @@ export class EventReelPreview extends LitElement {
         /* fall through to the next still */
       }
     }
-    this.nextStill();
+    if (gen === this.gen) this.nextStill();
   }
 
   private async loadVideo() {
     const ref = this.preview?.[0];
     if (!ref || !this.resolver) return;
+    const gen = this.gen;
     try {
-      this._video = await this.resolver.url(ref);
+      const url = await this.resolver.url(ref);
+      if (gen === this.gen) this._video = url;
     } catch {
+      if (gen !== this.gen) return;
       this.videoFailed = true;
       this._playing = false;
     }

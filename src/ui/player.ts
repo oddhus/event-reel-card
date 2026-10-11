@@ -8,7 +8,7 @@ import type HlsType from "hls.js/light";
 import { frigateMedia } from "../core/media";
 import type { MediaResolver } from "../core/media";
 import type { Localize, MediaRef, ReelEvent } from "../types";
-import "./preview";
+import { motionAllowed } from "./preview";
 
 type Status = "loading" | "playing" | "codec" | "deleted" | "unavailable";
 type FallbackStatus = Exclude<Status, "loading" | "playing">;
@@ -351,7 +351,8 @@ export class EventReelPlayer extends LitElement {
   private async preparePending(e: ReelEvent, token: number) {
     this._pendingUrl = undefined;
     const ref = e.preview?.[0];
-    if (!ref || !this.resolver) return;
+    // With reduced motion or data saving, the still stands in while the clip loads.
+    if (!ref || !this.resolver || !motionAllowed()) return;
     try {
       const url = await this.resolver.url(ref);
       if (this.alive(token)) this._pendingUrl = url;
@@ -431,17 +432,27 @@ export class EventReelPlayer extends LitElement {
             : html`<video class="main" muted playsinline controls preload="auto"></video>`
         }
         ${
-          this._status === "loading" && this._pendingUrl
-            ? html`<video
-                class="pending"
-                src=${this._pendingUrl}
-                muted
-                loop
-                autoplay
-                playsinline
-                aria-hidden="true"
-              ></video>`
-            : nothing
+          this._status !== "loading"
+            ? nothing
+            : this._pendingUrl
+              ? html`<video
+                  class="pending"
+                  src=${this._pendingUrl}
+                  muted
+                  loop
+                  autoplay
+                  playsinline
+                  aria-hidden="true"
+                ></video>`
+              : this.event.thumbnail?.length
+                ? html`<event-reel-preview
+                    class="still pending"
+                    .resolver=${this.resolver}
+                    .thumbnail=${this.event.thumbnail}
+                    mode="still"
+                    aria-hidden="true"
+                  ></event-reel-preview>`
+                : nothing
         }
         ${
           this._status === "loading"
