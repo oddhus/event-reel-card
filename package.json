@@ -1,6 +1,6 @@
 {
   "name": "event-reel-card",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Home Assistant Lovelace card: a compact timeline of the day's events with animated Frigate previews and exact clips.",
   "license": "MIT",

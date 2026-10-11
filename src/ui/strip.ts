@@ -15,6 +15,7 @@ export class EventReelStrip extends LitElement {
     selected: {},
     label: {},
     valueText: {},
+    live: { type: Boolean },
   };
 
   declare model?: StripModel;
@@ -26,6 +27,8 @@ export class EventReelStrip extends LitElement {
   declare label?: string;
   /** Spoken value: the time of the selected row. */
   declare valueText?: string;
+  /** The range ends now: draw the "now" line at the right edge. */
+  declare live: boolean;
 
   private dragging = false;
   private frame = 0;
@@ -148,7 +151,7 @@ export class EventReelStrip extends LitElement {
               style="left:${t.pos * 100}%;--c:${CATEGORY_COLORS[t.category]}"
             ></span>`,
         )}
-        <span class="now"></span>
+        ${this.live ? html`<span class="now"></span>` : nothing}
       </div>
       <div class="labels" aria-hidden="true">
         ${m.marks.map(

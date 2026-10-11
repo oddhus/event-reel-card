@@ -17,6 +17,8 @@ describe("normalizeConfig", () => {
     });
     expect(c.groupingWindow).toBe(120);
     expect(c.merge).toEqual({ before: 15, after: 30 });
+    expect(c.dayNavigation).toBe(true);
+    expect(normalizeConfig({ type: "x", day_navigation: false }).dayNavigation).toBe(false);
   });
 
   it("treats true/object as explicit and false as disabled", () => {

@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-11
+
+### Added
+
+- Buttons for the previous and next day, with a jump back to today. A past day runs from
+  midnight to midnight. Turn them off with `day_navigation: false`.
+
+### Fixed
+
+- A slow source no longer holds up the others: each source shows its events as soon as it
+  answers. A source that hasn't answered within 20 seconds gets a warning chip and keeps its
+  earlier rows, and its answer still shows up if it arrives later. Before, one source that
+  never answered left the card stuck on "Loading…".
+- An answer that arrives after the configuration changed (for example while you edit the
+  card) is dropped, instead of briefly showing data from the old configuration.
+
 ## [0.1.0] - 2026-10-10
 
 First release.

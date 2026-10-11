@@ -46,6 +46,49 @@ export const styles = css`
     --mdc-icon-size: 14px;
   }
 
+  .daynav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 8px 0 16px;
+  }
+  .daylabel {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .daynav .today {
+    margin-right: 8px;
+    font-size: 0.85em;
+  }
+  .navbtn {
+    all: unset;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--primary-text-color);
+    --mdc-icon-size: 22px;
+  }
+  .navbtn:hover {
+    background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+  }
+  .navbtn:disabled {
+    opacity: 0.38;
+    cursor: default;
+    background: none;
+  }
+  .navbtn:focus-visible {
+    outline: 2px solid var(--primary-color);
+  }
+
   .sticky {
     position: sticky;
     top: var(--header-height, 0px);

@@ -168,3 +168,28 @@ export function dayKey(epoch: number, timeZone: string): string {
   const p = zonedParts(epoch, timeZone);
   return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
 }
+
+function parseDayKey(key: string): { year: number; month: number; day: number } {
+  const [year, month, day] = key.split("-").map(Number);
+  return { year, month, day };
+}
+
+/** The day key `days` calendar days after `key` (negative goes back). */
+export function shiftDay(key: string, days: number): string {
+  const { year, month, day } = parseDayKey(key);
+  const d = new Date(Date.UTC(year, month - 1, day + days));
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+/** Midnight to midnight of a calendar day in the time zone (23 or 25 h on DST days). */
+export function dayRange(key: string, timeZone: string): TimeRange {
+  const firstInstant = (k: string) => {
+    const { year, month, day } = parseDayKey(k);
+    let t = zonedToEpoch({ year, month, day, hour: 0, minute: 0, second: 0 }, timeZone);
+    // Where DST skips midnight, that lands on the evening before; the day then starts at
+    // the jump (transitions fall on whole quarter hours).
+    for (let i = 0; i < 16 && dayKey(t, timeZone) !== k; i++) t += 900;
+    return t;
+  };
+  return { start: firstInstant(key), end: firstInstant(shiftDay(key, 1)) };
+}

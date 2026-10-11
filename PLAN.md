@@ -5,7 +5,7 @@ door, lock and presence changes, AI-described camera activity (LLM Vision), Frig
 review items with **animated thumbnails** and **the exact video clip**, Nest doorbell
 clips, and any other event you want to log.
 
-Status: v0.1.0 released 2026-10-10 (M1–M3 done; §9). Reviews are logged in §12. This
+Status: v0.2.0 released 2026-10-11 (M1–M3 done, then loading and day navigation; §9). Reviews are logged in §12. This
 document is the brief for the implementing agent. Private details about the reference install
 (entity ids, hosts, camera mapping, deploy steps) live in `CLAUDE.local.md`, which is
 gitignored. Read it if it exists, and never copy its contents into tracked files.
@@ -397,7 +397,21 @@ Goal: one row per real-world moment, with the AI title and description plus the 
   the `subscription_id`, and resubscribe after the HA connection reconnects.
 - LLM Vision: refetch (debounced to 2 s) when `calendar.llm_vision_timeline` changes.
 - Fallback for everything: poll every `refresh_interval` (default 60 s) while the card
-  is visible (`document.visibilityState`).
+  is visible (`document.visibilityState`). A past day (§5.1) isn't polled; push updates
+  and becoming visible still refresh it.
+- Loading (`core/loader.ts`, pure): each provider loads on its own and is published as
+  soon as it answers, so a slow provider never holds back the others. A source never gets
+  two requests at once, even across views: asking again while a request runs (including
+  one from an earlier view) loads it once more when that request answers or times out. So
+  quick day clicks or editor keystrokes don't pile up whole-day queries. A request that
+  runs past 20 s counts as failed (warning chip, earlier rows kept), but its late answer is
+  still used unless a newer request replaced it. A generation counter drops every answer
+  from before a restart, a config change or a day change. A new view waits up to 1.5 s for
+  every provider before its first paint, so the list doesn't build up row by row. After a
+  restart or config change the previous items stay up meanwhile; after a day change the
+  list shows "Loading…" instead, so the old day's rows never appear under the new date.
+- A pending deep link gives up ("not found") once every provider has answered, counting a
+  late answer after a timeout, or after 60 s.
 
 ### 3.8 Dependency policy and capability detection
 
@@ -520,7 +534,12 @@ Later:
   category, faint hourly activity in the background, context bands and a "now" line.
   Tap or drag to scroll the list to that time.
 - **"Mark all reviewed" (P1)** in the header when there are unreviewed Frigate items.
-- **`‹ date ›` day navigation (P2),** only when `range: today`.
+- **Day navigation (P2, done after 0.1.0):** a `label ‹ ›` row above the chips, not
+  sticky. The label is the live range ("Last 24 hours", "Today"), "Yesterday" or a date.
+  ‹ goes to the previous calendar day, local midnight to midnight (23 or 25 h on DST
+  days); › goes forward and returns to the live range after yesterday; "Today" jumps back.
+  It works with both range kinds. `day_navigation: false` hides it. A deep link returns to
+  the live range before it resolves.
 
 ### 5.2 Rows
 
@@ -624,8 +643,9 @@ to the clip.
 
 ### 5.9 Errors and empty states
 
-- Each provider fails independently. If a provider errors, show a small warning chip
-  ("Frigate unavailable") and still render the others.
+- Each provider fails independently. If a provider errors, or hasn't answered within
+  20 s, show a small warning chip ("Frigate unavailable") and still render the others
+  (§3.7).
 - A missing integration with an auto-enabled provider is silently skipped. If the
   provider was explicitly configured, show a warning.
 - A media fallback is not an error. Log it once to the console.
@@ -640,7 +660,7 @@ to the clip.
 |---|---|
 | P0 (M1) | Entity provider, LLM Vision provider, Frigate reviews provider, many-to-one merge, doorbell clips by Nest token, compact rows, grouping (bursts, bounces, camera groups), animated previews with fallback chain, HLS player with codec fallback, rolling 24 h range, nb/en |
 | P1 | Mark reviewed (+ mark all), download, filter chips and summary, day strip, deep links, GUI editor and stub config, HACS release |
-| P2 | Day navigation, context bands, calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, GenAI threat badge and `scene` fallback, search, presence at event time, "Summarize the day" (off by default) |
+| P2 | ~~Day navigation~~ (done), context bands, calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, GenAI threat badge and `scene` fallback, search, presence at event time, "Summarize the day" (off by default) |
 | P3 | Multi-camera sync, public provider API (`window.eventReel.registerProvider`), Reolink media-source provider, weekly heatmap |
 
 ---
@@ -777,6 +797,9 @@ to the clip.
   into LLM Vision is switched off.
 
 **M4+. P2 items.**
+- *After 0.1.0 (2026-10-11):* independent provider loading with a deadline (§3.7; the
+  top suggestion from a GPT-6-astra review, whose two defects were confirmed in the code)
+  and day navigation (§5.1).
 
 ---
 
@@ -860,3 +883,24 @@ reviewed M2. Fixed:
 - Frigate items are fetched as reviewed + unreviewed and merged. Frigate 0.18 returns both
   when `reviewed` is omitted (verified in its source), but older versions default to
   unreviewed only.
+
+**2026-10-11, loading and day navigation review.** GPT-6-sol (xhigh) and a fresh Claude
+(Opus 5.5) context reviewed the provider loader and day navigation before 0.2.0. Fixed:
+- A reload asked for while a request hung was lost when that request timed out; the
+  timeout now starts it.
+- Requests no longer pile up: a new view (day click, config change) queues behind a
+  request still running for the same source instead of sending a second one.
+- A deep link waits for late answers after a timeout (at most 60 s) before saying "not
+  found".
+- Days where DST skips midnight (America/Santiago, America/Havana) start at the jump,
+  not an hour early on the evening before.
+- An empty-state lookup started for the live range can't land on a past day, and it is
+  asked again when the live range returns.
+- Keyboard focus moves to ‹ when "Today" disappears or › is disabled.
+- The day buttons read the date when clicked, so a page left open past midnight steps
+  correctly; a past day's label re-renders every refresh interval.
+
+Not changed: switching days shows "Loading…" instead of keeping the previous day's rows
+up until the new day is ready, so rows never appear under the wrong date. The first-paint
+gate lives in the card and has no unit test; it was checked in the dev harness with
+`?slow=frigate:4` and `?slow=frigate:hang`.

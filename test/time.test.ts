@@ -1,16 +1,62 @@
 import { describe, expect, it } from "vitest";
 import {
   computeRange,
+  dayRange,
   formatDuration,
   formatLocalDateTime,
   formatTime,
   hourStart,
   parseRange,
+  shiftDay,
   zonedToEpoch,
 } from "../src/core/time";
 import { iso } from "./helpers";
 
 const OSLO = "Europe/Oslo";
+
+describe("day navigation", () => {
+  it("steps across month, year and leap-day boundaries", () => {
+    expect(shiftDay("2026-10-11", -1)).toBe("2026-10-10");
+    expect(shiftDay("2026-10-01", -1)).toBe("2026-09-30");
+    expect(shiftDay("2026-01-01", -1)).toBe("2025-12-31");
+    expect(shiftDay("2025-12-31", 1)).toBe("2026-01-01");
+    expect(shiftDay("2028-03-01", -1)).toBe("2028-02-29");
+    expect(shiftDay("2026-03-01", -1)).toBe("2026-02-28");
+  });
+
+  it("covers a day from local midnight to local midnight", () => {
+    expect(dayRange("2026-10-10", OSLO)).toEqual({
+      start: iso("2026-10-09T22:00:00Z"),
+      end: iso("2026-10-10T22:00:00Z"),
+    });
+    expect(dayRange("2026-01-15", OSLO)).toEqual({
+      start: iso("2026-01-14T23:00:00Z"),
+      end: iso("2026-01-15T23:00:00Z"),
+    });
+  });
+
+  it("gives DST days 23 and 25 hours", () => {
+    // Clocks go forward on 2026-03-29 and back on 2026-10-25 in Oslo.
+    const spring = dayRange("2026-03-29", OSLO);
+    expect(spring).toEqual({
+      start: iso("2026-03-28T23:00:00Z"),
+      end: iso("2026-03-29T22:00:00Z"),
+    });
+    const autumn = dayRange("2026-10-25", OSLO);
+    expect(autumn).toEqual({
+      start: iso("2026-10-24T22:00:00Z"),
+      end: iso("2026-10-25T23:00:00Z"),
+    });
+  });
+
+  it("starts a day at the jump where DST skips midnight", () => {
+    // In Santiago, 2026-09-06 00:00 doesn't exist: the clock goes from 23:59 (-04) to 01:00 (-03).
+    const santiago = "America/Santiago";
+    expect(dayRange("2026-09-06", santiago).start).toBe(iso("2026-09-06T04:00:00Z"));
+    expect(dayRange("2026-09-05", santiago).end).toBe(iso("2026-09-06T04:00:00Z"));
+    expect(dayRange("2026-09-05", santiago).start).toBe(iso("2026-09-05T04:00:00Z"));
+  });
+});
 
 describe("parseRange", () => {
   it("parses rolling hours and today", () => {

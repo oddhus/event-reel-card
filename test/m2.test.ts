@@ -167,6 +167,13 @@ describe("editor model", () => {
     expect(back.frigate).toBe(true);
   });
 
+  it("writes day_navigation only when it is switched off", () => {
+    expect(formToConfig(configToForm(base), base)).not.toHaveProperty("day_navigation");
+    const off = formToConfig({ ...configToForm(base), day_navigation: false }, base);
+    expect(off.day_navigation).toBe(false);
+    expect(configToForm(off).day_navigation).toBe(false);
+  });
+
   it("keeps keys the form doesn't show", () => {
     const c = formToConfig({ ...configToForm(base), title: "Today" }, base);
     expect(c.camera_aliases).toEqual(base.camera_aliases);

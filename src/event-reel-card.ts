@@ -14,16 +14,19 @@ import { applyFilters, cameraOptions, itemEvents, summarize } from "./core/filte
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
 import type { BurstSegment, TimelineItem } from "./core/grouping";
+import { Loader } from "./core/loader";
 import { MediaResolver } from "./core/media";
 import { mergeEvents } from "./core/merge";
 import { nearestItem, stripModel, timeAt } from "./core/strip";
 import {
   computeRange,
   dayKey,
+  dayRange,
   formatDay,
   formatDuration,
   formatTime,
   hourStart,
+  shiftDay,
 } from "./core/time";
 import type { TimeFormatOptions } from "./core/time";
 import type { Category } from "./types";
@@ -70,6 +73,15 @@ const dataKey = (c: NormalizedConfig) =>
     c.language,
   ]);
 
+/** Seconds before a provider that hasn't answered is shown as unavailable. */
+const FETCH_TIMEOUT = 20;
+
+/** Milliseconds a new view waits for every provider before showing the ones that answered. */
+const FIRST_PAINT_WAIT = 1500;
+
+/** Seconds a deep link waits for a slow provider before the card says it wasn't found. */
+const LINK_WAIT = 60;
+
 /** Seconds a live state change is kept while waiting for the logbook to return it. */
 const LIVE_GRACE = 120;
 
@@ -89,6 +101,8 @@ export class EventReelCard extends LitElement {
     _highlight: { state: true },
     _notice: { state: true },
     _lastEarlier: { state: true },
+    _day: { state: true },
+    _partial: { state: true },
   };
 
   declare _items: TimelineItem[];
@@ -102,6 +116,10 @@ export class EventReelCard extends LitElement {
   declare _notice?: string;
   /** Time of the newest event before the range, shown when the range is empty. */
   declare _lastEarlier?: number;
+  /** The calendar day shown (YYYY-MM-DD); undefined shows the configured range up to now. */
+  declare _day?: string;
+  /** Some provider hasn't answered yet in this view. */
+  declare _partial: boolean;
 
   private _hass?: HomeAssistant;
   private _cameras?: CameraRegistry;
@@ -120,11 +138,25 @@ export class EventReelCard extends LitElement {
   private _subscribed = new Set<string>();
   /** Last rendered object per event id, reused while the content is unchanged. */
   private _stable = new Map<string, { sig: string; event: ReelEvent }>();
-  private _refreshing = false;
-  private _queued?: Set<string> | "all";
+  private _loader = new Loader<{ events: ReelEvent[]; range: TimeRange }>(
+    {
+      result: (type, { events, range }) => this._onResult(type, events, range),
+      error: (type, reason) => this._onError(type, reason),
+      settled: () => this._schedulePublish(),
+      again: (type) => this._refresh([type]),
+    },
+    FETCH_TIMEOUT * 1000,
+  );
+  /** The current view hasn't been published yet; the previous items stay up meanwhile. */
+  private _waiting = true;
+  private _firstPaintDue = false;
+  private _firstPaintTimer?: number;
+  private _publishQueued = false;
   /** Events marked reviewed here, shown as reviewed until Frigate reports it too. */
   private _reviewed = new Set<string>();
   private _pendingLink?: string;
+  /** When the pending link was read (performance.now()). */
+  private _linkSince = 0;
   private _handledLink?: string;
   private _lastEarlierAt = -Infinity;
   private _highlightTimer?: number;
@@ -144,6 +176,7 @@ export class EventReelCard extends LitElement {
     this._openGroups = new Set();
     this._errors = new Map();
     this._loaded = false;
+    this._partial = true;
     this._filter = { categories: new Set() };
   }
 
@@ -155,9 +188,11 @@ export class EventReelCard extends LitElement {
     this._config = next;
     this._updateLanguage();
     if (!next.filters) this._filter = { categories: new Set() };
+    const leaveDay = !next.dayNavigation && this._day !== undefined;
+    if (leaveDay) this._setDay(undefined);
     if (!this._started) return;
     // The editor calls this on every keystroke; only refetch when the data would differ.
-    if (prev && dataKey(prev) === dataKey(next)) {
+    if (prev && !leaveDay && dataKey(prev) === dataKey(next)) {
       this._recompute();
       this.requestUpdate();
       return;
@@ -251,22 +286,29 @@ export class EventReelCard extends LitElement {
   }
 
   private _onVisibility = () => {
-    if (document.visibilityState === "visible" && this._started) void this._refresh();
+    if (document.visibilityState === "visible" && this._started) this._refresh();
   };
 
   private _maybeStart() {
     if (this._started || !this.isConnected || !this._hass || !this._config) return;
     this._started = true;
+    this._newView();
     this._buildRegistry();
     this._ensureSubscriptions();
     this._timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void this._refresh();
+      if (document.visibilityState !== "visible") return;
+      // A past day rarely changes (push updates still refresh it); re-render so its label
+      // follows the date, such as "Yesterday" after midnight.
+      if (this._day) this.requestUpdate();
+      else this._refresh();
     }, this._config.refreshInterval * 1000);
-    void this._refresh();
+    this._refresh();
   }
 
   private _stop() {
     this._started = false;
+    this._loader.reset(); // answers to requests made before this are dropped
+    window.clearTimeout(this._firstPaintTimer);
     window.clearInterval(this._timer);
     for (const id of this._debounce.values()) window.clearTimeout(id);
     this._debounce.clear();
@@ -345,71 +387,146 @@ export class EventReelCard extends LitElement {
       type,
       window.setTimeout(() => {
         this._debounce.delete(type);
-        void this._refresh([type]);
+        this._refresh([type]);
       }, ms),
     );
   }
 
-  private async _refresh(only?: string[]): Promise<void> {
-    if (!this._hass || !this._config) return;
-    if (this._refreshing) {
-      if (!only || this._queued === "all") this._queued = "all";
-      else this._queued = new Set([...(this._queued ?? []), ...only]);
-      return;
+  /** Starts loading every provider (or only some); each one is published as it answers. */
+  private _refresh(only?: string[]): void {
+    if (!this._hass || !this._config || !this._started) return;
+    const now = clock.now();
+    this._buildRegistry();
+    const range = this._day
+      ? dayRange(this._day, this._tz())
+      : computeRange(this._config.range, now, this._tz());
+    this._range = range;
+    const ctx = this._ctx(now);
+    for (const p of this._providers) {
+      if (only && !only.includes(p.type)) continue;
+      const type = p.type as ProviderType;
+      const status = this._status(type);
+      if (status === "active") {
+        this._loader.load(type, async () => ({ events: await p.fetch(range, ctx), range }));
+        continue;
+      }
+      this._results.delete(type);
+      const explicit = type !== "entity" && this._config[type].explicit;
+      this._setError(type, status === "missing" && explicit ? "missing" : undefined);
+      this._loader.skip(type);
     }
-    this._refreshing = true;
-    try {
-      const now = clock.now();
-      this._buildRegistry();
-      const range = computeRange(this._config.range, now, this._tz());
-      this._range = range;
-      const ctx = this._ctx(now);
-      const errors = new Map(this._errors);
+    this._ensureSubscriptions();
+  }
 
-      await Promise.all(
-        this._providers.map(async (p) => {
-          if (only && !only.includes(p.type)) return;
-          const type = p.type as ProviderType;
-          const status = this._status(type);
-          if (status !== "active") {
-            this._results.delete(type);
-            const explicit = type !== "entity" && this._config![type].explicit;
-            if (status === "missing" && explicit) errors.set(type, "missing");
-            else errors.delete(type);
-            return;
-          }
-          try {
-            const events = await p.fetch(range, ctx);
-            this._results.set(type, events);
-            errors.delete(type);
-            // Keep live events until the logbook has them (the recorder commits with a delay).
-            if (type === "entity") {
-              this._live = this._live.filter(
-                (e) => e.start > range.end - LIVE_GRACE && !events.some((f) => sameChange(e, f)),
-              );
-            }
-          } catch (err) {
-            console.warn(`[event-reel] ${type} failed`, err);
-            errors.set(type, "unavailable");
-          }
-        }),
+  private _onResult(type: string, events: ReelEvent[], range: TimeRange) {
+    this._results.set(type, events);
+    this._setError(type, undefined);
+    // Keep live events until the logbook has them (the recorder commits with a delay).
+    if (type === "entity" && !this._day) {
+      this._live = this._live.filter(
+        (e) => e.start > range.end - LIVE_GRACE && !events.some((f) => sameChange(e, f)),
       );
-      this._errors = errors;
-      this._ensureSubscriptions();
-      this._loaded = true;
-      this._recompute();
-      if (!only) this._resolveDeepLink(true);
-    } finally {
-      this._refreshing = false;
-      this._loaded = true;
-      const queued = this._queued;
-      this._queued = undefined;
-      if (queued) void this._refresh(queued === "all" ? undefined : [...queued]);
     }
   }
 
+  /** A failed or slow provider keeps its last rows and gets a warning chip. */
+  private _onError(type: string, reason: unknown) {
+    if (reason === "timeout") {
+      console.warn(`[event-reel] ${type} did not answer within ${FETCH_TIMEOUT} s`);
+    } else {
+      console.warn(`[event-reel] ${type} failed`, reason);
+    }
+    this._setError(type, "unavailable");
+  }
+
+  private _setError(type: string, kind: "unavailable" | "missing" | undefined) {
+    if (this._errors.get(type) === kind) return;
+    const errors = new Map(this._errors);
+    if (kind) errors.set(type, kind);
+    else errors.delete(type);
+    this._errors = errors;
+  }
+
+  /** Starts a new view of the data: earlier answers are dropped, and the first paint waits. */
+  private _newView() {
+    this._loader.reset();
+    this._waiting = true;
+    this._partial = true;
+    this._firstPaintDue = false;
+    window.clearTimeout(this._firstPaintTimer);
+    this._firstPaintTimer = window.setTimeout(() => {
+      this._firstPaintDue = true;
+      this._schedulePublish();
+    }, FIRST_PAINT_WAIT);
+  }
+
+  /** Publishes once per task, so providers that answer together render once. */
+  private _schedulePublish() {
+    if (this._publishQueued) return;
+    this._publishQueued = true;
+    queueMicrotask(() => {
+      this._publishQueued = false;
+      this._publish();
+    });
+  }
+
+  private _publish() {
+    if (!this._started) return;
+    const all = this._loader.settledAll(this._providers.map((p) => p.type));
+    if (this._waiting) {
+      // Wait briefly for every provider, so the list doesn't build up row by row.
+      if (!all && !this._firstPaintDue) return;
+      this._waiting = false;
+      window.clearTimeout(this._firstPaintTimer);
+    }
+    this._partial = !all;
+    this._loaded = true;
+    this._ensureSubscriptions();
+    this._recompute();
+    // A pending deep link gives up once every provider has answered, or after a while (a
+    // provider that timed out may still answer with the linked event).
+    if (!this._loader.pending || performance.now() - this._linkSince > LINK_WAIT * 1000) {
+      this._resolveDeepLink(true);
+    }
+  }
+
+  /** Shows a calendar day (YYYY-MM-DD), or the configured range up to now when undefined. */
+  private _showDay(day: string | undefined) {
+    if (day === this._day) return;
+    this._setDay(day);
+    if (!this._started) return;
+    this._newView();
+    this._refresh();
+  }
+
+  /** Switches the day in view and clears what was shown for the previous one. */
+  private _setDay(day: string | undefined) {
+    this._day = day;
+    this._results.clear();
+    this._items = [];
+    this._loaded = false;
+    this._openId = undefined;
+    this._openGroups = new Set();
+    this._highlight = undefined;
+    this._linkedEvent = undefined;
+    this._lastEarlier = undefined;
+    this._hadItems = false;
+    this._lastEarlierToken++; // drop a lookup made for the previous view
+    this._lastEarlierAt = -Infinity;
+  }
+
+  /** Day navigation: switches the day and keeps keyboard focus in the navigation row. */
+  private async _navTo(day: string | undefined) {
+    this._showDay(day);
+    await this.updateComplete;
+    // "Today" is gone and › is disabled after returning to the live range.
+    const root = this.renderRoot as ShadowRoot;
+    const active = root.activeElement as HTMLButtonElement | null;
+    if (!active || active.disabled) root.querySelector<HTMLElement>(".navbtn.prev")?.focus();
+  }
+
   private _recompute() {
-    if (!this._config || !this._range) return;
+    if (!this._config || !this._range || this._waiting) return;
     const byId = new Map<string, ReelEvent>();
     for (const list of this._results.values()) for (const e of list) byId.set(e.id, e);
     const fetched = this._results.get("entity") ?? [];
@@ -427,6 +544,8 @@ export class EventReelCard extends LitElement {
       hideUnconfirmed: cfg.frigate.hide_unconfirmed,
     });
     const start = this._range.start;
+    // A past day ends at midnight; the live range keeps taking live events after its end.
+    const end = this._day ? this._range.end : Infinity;
     // Reviews marked here stay marked until Frigate reports them as reviewed too.
     for (const e of merged) if (e.reviewed === true) this._reviewed.delete(e.id);
     const visible = this._stabilize(
@@ -434,7 +553,7 @@ export class EventReelCard extends LitElement {
         .map((e) =>
           e.reviewed === false && this._reviewed.has(e.id) ? { ...e, reviewed: true } : e,
         )
-        .filter((e) => (e.end ?? e.start) >= start)
+        .filter((e) => (e.end ?? e.start) >= start && e.start < end)
         .sort((a, b) => b.start - a.start)
         .slice(0, cfg.maxEvents),
     );
@@ -445,7 +564,7 @@ export class EventReelCard extends LitElement {
     if (items.length) {
       this._lastEarlier = undefined;
       this._hadItems = true;
-    } else if (this._loaded) {
+    } else if (this._loaded && !this._partial && !this._day) {
       if (this._hadItems) this._lastEarlierAt = -Infinity; // rows just aged out: ask again
       this._hadItems = false;
       void this._findLastEarlier();
@@ -475,7 +594,7 @@ export class EventReelCard extends LitElement {
       tasks.push(latestReviewBefore(ctx, range.start).catch(() => undefined));
     }
     const times = (await Promise.all(tasks)).filter((t): t is number => typeof t === "number");
-    if (token !== this._lastEarlierToken || this._items.length) return; // superseded
+    if (token !== this._lastEarlierToken || this._items.length || this._day) return; // superseded
     this._lastEarlier = times.length ? Math.max(...times) : undefined;
   }
 
@@ -489,11 +608,17 @@ export class EventReelCard extends LitElement {
       return;
     }
     if (id === this._handledLink) return;
+    if (id !== this._pendingLink) this._linkSince = performance.now();
     this._pendingLink = id;
     this._notice = undefined;
+    // Links point into the live range; leaving a past day loads it, then resolves the link.
+    if (this._day) {
+      this._showDay(undefined);
+      return;
+    }
     this._resolveDeepLink();
     // Not in the loaded data yet (e.g. a notification for a brand-new review): fetch now.
-    if (this._pendingLink && this._loaded && this._started) void this._refresh();
+    if (this._pendingLink && this._loaded && this._started) this._refresh();
   };
 
   /** Drops `reel` from the URL so other views and later visits don't re-open it. */
@@ -970,7 +1095,8 @@ export class EventReelCard extends LitElement {
   private _renderList(items: TimelineItem[]) {
     const tz = this._tz();
     const opts = this._timeOpts();
-    const today = dayKey(clock.now(), tz);
+    // Label days other than the one in view (today, or the day shown).
+    const today = this._day ?? dayKey(clock.now(), tz);
     const entries: { key: string; tpl: TemplateResult }[] = [];
     let lastHour: number | undefined;
     let lastDay: string | undefined;
@@ -1089,6 +1215,7 @@ export class EventReelCard extends LitElement {
       .selected=${this._highlight}
       .label=${this._localize("strip.label")}
       .valueText=${this._stripValueText(filtered)}
+      .live=${!this._day}
       @strip-select=${(ev: CustomEvent<{ position: number; id?: string }>) =>
         this._onStripSelect(ev, filtered)}
     ></event-reel-strip>`;
@@ -1104,8 +1231,13 @@ export class EventReelCard extends LitElement {
   private _empty() {
     const t = this._localize;
     const range = this._config!.range;
-    const text =
-      range.kind === "today" ? t("empty.today") : t("empty.rolling", { hours: range.hours });
+    const text = this._day
+      ? this._day === shiftDay(dayKey(clock.now(), this._tz()), -1)
+        ? t("empty.yesterday")
+        : t("empty.day")
+      : range.kind === "today"
+        ? t("empty.today")
+        : t("empty.rolling", { hours: range.hours });
     const last = this._lastEarlier;
     const opts = this._timeOpts();
     return html`<div class="empty" role="status">
@@ -1120,6 +1252,55 @@ export class EventReelCard extends LitElement {
     </div>`;
   }
 
+  private _dayNav() {
+    if (!this._config?.dayNavigation) return nothing;
+    const t = this._localize;
+    const tz = this._tz();
+    const today = dayKey(clock.now(), tz);
+    const day = this._day;
+    const range = this._config.range;
+    const label = !day
+      ? range.kind === "today"
+        ? t("nav.today")
+        : t("nav.last_hours", { hours: range.hours })
+      : day === shiftDay(today, -1)
+        ? t("nav.yesterday")
+        : formatDay(dayRange(day, tz).start, this._timeOpts());
+    // The handlers read the date when clicked: the row may have been drawn before midnight.
+    const now = () => dayKey(clock.now(), this._tz());
+    return html`<div class="daynav" role="group" aria-label=${t("nav.label")}>
+      <span class="daylabel" aria-live="polite">${label}</span>
+      ${
+        day
+          ? html`<button class="linkish today" @click=${() => this._navTo(undefined)}>
+              ${t("nav.today")}
+            </button>`
+          : nothing
+      }
+      <button
+        class="navbtn prev"
+        title=${t("nav.previous_day")}
+        aria-label=${t("nav.previous_day")}
+        @click=${() => this._navTo(shiftDay(this._day ?? now(), -1))}
+      >
+        <ha-icon icon="mdi:chevron-left"></ha-icon>
+      </button>
+      <button
+        class="navbtn"
+        title=${t("nav.next_day")}
+        aria-label=${t("nav.next_day")}
+        ?disabled=${!day}
+        @click=${() => {
+          if (!this._day) return;
+          const next = shiftDay(this._day, 1);
+          void this._navTo(next < now() ? next : undefined);
+        }}
+      >
+        <ha-icon icon="mdi:chevron-right"></ha-icon>
+      </button>
+    </div>`;
+  }
+
   protected override render() {
     if (!this._config) return nothing;
     const t = this._localize;
@@ -1127,7 +1308,7 @@ export class EventReelCard extends LitElement {
     const hasItems = this._loaded && this._items.length > 0;
     return html`
       <ha-card .header=${this._config.title || undefined}>
-        ${this._warnings()}
+        ${this._dayNav()} ${this._warnings()}
         ${
           this._notice
             ? html`<div class="notice" role="status">
@@ -1150,7 +1331,7 @@ export class EventReelCard extends LitElement {
             : nothing
         }
         ${
-          !this._loaded
+          !this._loaded || (this._partial && !this._items.length)
             ? html`<div class="empty" role="status">${t("loading")}</div>`
             : filtered.length
               ? html`<div

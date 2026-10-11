@@ -123,6 +123,7 @@ export class EventReelCardEditor extends LitElement {
         schema: [
           { name: "filters", selector: { boolean: {} } },
           { name: "day_strip", selector: { boolean: {} } },
+          { name: "day_navigation", selector: { boolean: {} } },
         ],
       },
       {

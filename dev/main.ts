@@ -11,6 +11,7 @@ import type { WsHandler } from "./mock-hass";
 //   ?now=2026-10-08T21:00:00+02:00   pin the clock
 //   ?live=1                          real Frigate reviews and media through the Vite proxy (FRIGATE_URL)
 //   ?density=comfortable             row density
+//   ?slow=frigate:5,llmvision:hang   delay a source by seconds, or never answer
 const params = new URLSearchParams(location.search);
 const pinned = params.get("now");
 if (pinned) {
@@ -155,6 +156,25 @@ const handlers: Record<string, WsHandler> = {
     };
   },
 };
+
+// Simulate slow or hanging sources, to check that the others still show.
+const slowKeys: Record<string, string> = {
+  entity: "logbook/get_events",
+  llmvision: "call_service:llmvision.get_events",
+  frigate: "frigate/reviews/get",
+};
+for (const part of (params.get("slow") ?? "").split(",").filter(Boolean)) {
+  const [source, seconds] = part.split(":");
+  const key = slowKeys[source];
+  const inner = key ? handlers[key] : undefined;
+  if (!key || !inner) continue;
+  handlers[key] = (msg) =>
+    seconds === "hang"
+      ? new Promise(() => undefined)
+      : new Promise((resolve) =>
+          setTimeout(() => resolve(inner(msg)), Number(seconds || 5) * 1000),
+        );
+}
 
 if (live) {
   // Real Frigate camera names come from live data at runtime; nothing private is committed.

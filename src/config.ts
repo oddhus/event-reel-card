@@ -59,6 +59,8 @@ export interface CardConfig {
   filters?: boolean;
   /** The 24 h overview bar (default true). */
   day_strip?: boolean;
+  /** Buttons for the previous and next day (default true). */
+  day_navigation?: boolean;
 }
 
 export interface NormalizedConfig {
@@ -79,6 +81,7 @@ export interface NormalizedConfig {
   merge: { before: number; after: number };
   filters: boolean;
   dayStrip: boolean;
+  dayNavigation: boolean;
 }
 
 function toggle(value: unknown): ProviderToggle {
@@ -148,5 +151,6 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
     merge: { before: num(config.merge?.before, 15), after: num(config.merge?.after, 30) },
     filters: config.filters !== false,
     dayStrip: config.day_strip !== false,
+    dayNavigation: config.day_navigation !== false,
   };
 }
