@@ -34,6 +34,7 @@ export const nb: Strings = {
   "object.package": "Pakke",
   "object.face": "Ansikt",
   "object.license_plate": "Skilt",
+  "object.chime": "Ringte på",
   "category.person": "Personer",
   "category.vehicle": "Kjøretøy",
   "category.animal": "Dyr",

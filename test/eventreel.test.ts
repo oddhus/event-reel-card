@@ -74,6 +74,7 @@ describe("eventReelToEvents", () => {
       category: "doorbell",
       camera: "camera.doorbell",
       clip: { kind: "mp4", path: "media-source://nest/nest-1/TOKEN1", resolve: true },
+      labels: ["person", "chime"],
     });
     expect(e.thumbnail).toEqual([
       { kind: "image", path: "/api/nest/event_media/nest-1/TOKEN1/thumbnail" },
@@ -89,6 +90,19 @@ describe("eventReelToEvents", () => {
     const [e] = eventReelToEvents([doorbell], ctx({ nest: false }));
     expect(e.clip).toBeUndefined();
     expect(e.thumbnail).toHaveLength(1);
+  });
+
+  it("offers no clip for a Nest camera that only sends pictures", () => {
+    const pictureOnly = {
+      ...doorbell,
+      nest: { device_id: "nest-1", event_token: "T", video: false },
+    };
+    const [e] = eventReelToEvents([pictureOnly], ctx());
+    expect(e.clip).toBeUndefined();
+    expect(e.thumbnail?.[0]).toEqual({
+      kind: "image",
+      path: "/api/nest/event_media/nest-1/T/thumbnail",
+    });
   });
 
   it("resolves camera aliases and names unknown cameras", () => {
@@ -164,6 +178,40 @@ describe("Event Reel provider", () => {
       limit: 100,
     });
     expect(events.map((e) => e.id)).toEqual(["event_reel:abc"]);
+  });
+
+  it("keeps the limit inside what the integration accepts", async () => {
+    const limits = [];
+    for (const max_events of [6000, 150.5, 10]) {
+      const callWS = vi.fn().mockResolvedValue({ events: [] });
+      const hass = { callWS, states: {} } as unknown as HomeAssistant;
+      const config = normalizeConfig({ type: "custom:event-reel-card", max_events });
+      await createEventReelProvider().fetch(
+        { start: iso("2026-10-08T00:00:00Z"), end: iso("2026-10-08T23:59:59Z") },
+        { hass, config, cameras, localize: getLocalize("en"), now: iso("2026-10-09T00:00:00Z") },
+      );
+      limits.push(callWS.mock.calls[0][0].limit);
+    }
+    expect(limits).toEqual([5000, 151, 100]);
+  });
+
+  it("skips an integration that isn't loaded quietly, unless it was asked for", async () => {
+    const notLoaded = { code: "not_loaded", message: "Event Reel is not loaded" };
+    const hass = {
+      callWS: vi.fn().mockRejectedValue(notLoaded),
+      states: {},
+    } as unknown as HomeAssistant;
+    const range = { start: iso("2026-10-08T00:00:00Z"), end: iso("2026-10-08T23:59:59Z") };
+    const run = (raw: Record<string, unknown>) =>
+      createEventReelProvider().fetch(range, {
+        hass,
+        config: normalizeConfig({ type: "custom:event-reel-card", ...raw }),
+        cameras,
+        localize: getLocalize("en"),
+        now: iso("2026-10-09T00:00:00Z"),
+      });
+    await expect(run({})).resolves.toEqual([]);
+    await expect(run({ event_reel: true })).rejects.toBe(notLoaded);
   });
 
   it("finds the newest event before a time", async () => {
@@ -255,10 +303,49 @@ describe("merging Event Reel text", () => {
       { start: iso("2026-10-08T11:44:56Z"), title: "Child looks out", description: undefined },
     ]);
   });
+
+  it("keeps both descriptions of a ring when the row also joins a Frigate review", () => {
+    // A Nest doorbell whose stream Frigate records too: one camera, three sources.
+    const clip = { kind: "mp4" as const, path: "media-source://nest/nest-1/TOKEN1", resolve: true };
+    const review = ev({
+      id: "frigate:frigate:r9",
+      provider: "frigate",
+      camera: "camera.entrance",
+      start: iso("2026-10-08T11:44:50Z"),
+      end: iso("2026-10-08T11:45:30Z"),
+      title: "Person at Entrance",
+      category: "person",
+    });
+    const llm = ev({
+      id: "llmvision:u1",
+      provider: "llmvision",
+      camera: "camera.entrance",
+      start: iso("2026-10-08T11:44:56Z"),
+      title: "Child looks out",
+      clip,
+    });
+    const reel = ev({
+      id: "event_reel:abc",
+      provider: "event_reel",
+      camera: "camera.entrance",
+      start: iso("2026-10-08T11:44:55Z"),
+      title: "Child opens the door",
+      category: "doorbell",
+      clip,
+    });
+
+    const [row, ...others] = mergeEvents([review, llm, reel], opts);
+
+    expect(others).toEqual([]);
+    expect(row.id).toBe("frigate:frigate:r9");
+    expect(row.title).toBe("Child opens the door");
+    expect(row.extra?.map((x) => x.title)).toEqual(["Child looks out"]);
+    expect(row.sources).toEqual(["event_reel", "llmvision", "frigate"]);
+  });
 });
 
 describe("event_reel config", () => {
-  it("is on by default and quietly skipped when missing", () => {
+  it("is on by default and can be switched off", () => {
     expect(normalizeConfig({ type: "x" }).event_reel).toEqual({ enabled: true, explicit: false });
     expect(normalizeConfig({ type: "x", event_reel: false }).event_reel).toEqual({
       enabled: false,

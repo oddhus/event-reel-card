@@ -32,6 +32,7 @@ export const en = {
   "object.package": "Package",
   "object.face": "Face",
   "object.license_plate": "License plate",
+  "object.chime": "Rang the bell",
   "category.person": "People",
   "category.vehicle": "Vehicles",
   "category.animal": "Animals",

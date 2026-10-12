@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The project uses
 
 ## [Unreleased]
 
+### Added
+
+- AI descriptions from the new companion integration,
+  [Event Reel](https://github.com/oddhus/event-reel). It describes Nest doorbell clips and
+  any other camera with the AI Task you already have in Home Assistant, such as a local
+  Ollama model. The card finds it on its own; `event_reel: false` (or the switch in the
+  editor) turns it off. Its events join Frigate reviews on the same camera like LLM Vision
+  events, and a doorbell ring described by both Event Reel and LLM Vision is one row.
+
 ### Changed
 
 - Durations are translated: Norwegian shows `1 t 5 min` instead of `1h 5m`.

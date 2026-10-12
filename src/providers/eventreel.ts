@@ -22,7 +22,8 @@ export interface EventReelRecord {
   labels?: string[];
   key_frame?: string | null;
   source?: string;
-  nest?: { device_id?: string; event_token?: string } | null;
+  /** `video: false` for a Nest camera that sent only a picture (no clip). */
+  nest?: { device_id?: string; event_token?: string; video?: boolean } | null;
   analysis?: string;
 }
 
@@ -57,6 +58,8 @@ export function eventReelToEvents(raw: EventReelRecord[], ctx: EventReelMapConte
       ctx.nest && e.nest?.device_id && e.nest.event_token
         ? nestMedia(e.nest.device_id, e.nest.event_token)
         : undefined;
+    // A camera without clips: its Nest media is a picture, not something to play.
+    const clip = e.nest?.video === false ? undefined : nest?.clip;
     const keyFrame = imageRef(e.key_frame);
     const thumbnail = [nest?.thumbnail, keyFrame].filter((m): m is MediaRef => !!m);
 
@@ -85,7 +88,8 @@ export function eventReelToEvents(raw: EventReelRecord[], ctx: EventReelMapConte
       camera,
       cameraLabel: camera ? undefined : cameraName,
       thumbnail: thumbnail.length ? thumbnail : undefined,
-      clip: nest?.clip,
+      clip,
+      labels: e.labels?.length ? [...e.labels] : undefined,
       raw: e,
     });
   }
@@ -98,17 +102,31 @@ interface ListResult {
 
 const isoOf = (epoch: number) => new Date(epoch * 1000).toISOString();
 
+/** The most events the integration returns in one list. */
+const MAX_LIMIT = 5000;
+
+/** The integration's services can outlive it (removed, or failed to load). */
+const isNotLoaded = (err: unknown) =>
+  typeof err === "object" && err !== null && (err as { code?: unknown }).code === "not_loaded";
+
 export function createEventReelProvider(): Provider {
   return {
     type: "event_reel",
 
     async fetch(range: TimeRange, ctx: ProviderContext): Promise<ReelEvent[]> {
-      const res = await ctx.hass.callWS<ListResult>({
-        type: "event_reel/events/list",
-        start_time: isoOf(range.start),
-        end_time: isoOf(range.end),
-        limit: Math.max(ctx.config.maxEvents, 100),
-      });
+      let res: ListResult;
+      try {
+        res = await ctx.hass.callWS<ListResult>({
+          type: "event_reel/events/list",
+          start_time: isoOf(range.start),
+          end_time: isoOf(range.end),
+          limit: Math.min(MAX_LIMIT, Math.max(100, Math.round(ctx.config.maxEvents))),
+        });
+      } catch (err) {
+        // Skipped quietly unless the user asked for Event Reel.
+        if (isNotLoaded(err) && !ctx.config.event_reel.explicit) return [];
+        throw err;
+      }
       return eventReelToEvents(res.events ?? [], {
         cameras: ctx.cameras,
         nest: ctx.config.nest.enabled,

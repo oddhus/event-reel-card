@@ -25,18 +25,24 @@ const VAGUE: Category[] = ["motion", "custom"];
 
 function mergeGroup(media: ReelEvent, texts: ReelEvent[]): ReelEvent {
   const [first, ...rest] = texts;
+  // A text may already carry extra descriptions (the same clip described twice).
+  const extra = [
+    ...(first.extra ?? []),
+    ...rest.flatMap((t) => [
+      { start: t.start, title: t.title, description: t.description },
+      ...(t.extra ?? []),
+    ]),
+  ];
   return {
     ...media,
-    sources: [...new Set([...first.sources, ...media.sources])],
+    sources: [...new Set([...texts.flatMap((t) => t.sources), ...media.sources])],
     aliases: [...(media.aliases ?? []), ...texts.flatMap((t) => [t.id, ...(t.aliases ?? [])])],
     start: Math.min(media.start, first.start),
     // An AI moment just after the review ended must still be inside the clip.
     end: media.end === undefined ? undefined : Math.max(media.end, ...texts.map((t) => t.start)),
     title: first.title,
     description: first.description ?? media.description,
-    extra: rest.length
-      ? rest.map((t) => ({ start: t.start, title: t.title, description: t.description }))
-      : undefined,
+    extra: extra.length ? extra : undefined,
     category: VAGUE.includes(first.category) ? media.category : first.category,
     thumbnail: [...(media.thumbnail ?? []), ...texts.flatMap((t) => t.thumbnail ?? [])],
     raw: { media: media.raw, texts: texts.map((t) => t.raw) },

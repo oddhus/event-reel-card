@@ -1,11 +1,12 @@
 # Event Reel Card: implementation plan
 
 A Home Assistant Lovelace card that shows one compact timeline of the day's events:
-door, lock and presence changes, AI-described camera activity (LLM Vision), Frigate
+door, lock and presence changes, AI-described camera activity (Frigate GenAI, the
+companion Event Reel integration or LLM Vision), Frigate
 review items with **animated thumbnails** and **the exact video clip**, Nest doorbell
 clips, and any other event you want to log.
 
-Status: v0.2.1 released 2026-10-11 (M1–M3 done, then loading and day navigation, then review fixes; §9). Reviews are logged in §12. This
+Status: v0.2.1 released 2026-10-11 (M1–M3 done, then loading and day navigation, then review fixes; §9). Unreleased: the Event Reel provider for the companion integration (§2.6). Reviews are logged in §12. This
 document is the brief for the implementing agent. Private details about the reference install
 (entity ids, hosts, camera mapping, deploy steps) live in `CLAUDE.local.md`, which is
 gitignored. Read it if it exists, and never copy its contents into tracked files.
@@ -14,11 +15,11 @@ gitignored. Read it if it exists, and never copy its contents into tracked files
 
 ## 1. Goals
 
-1. **One timeline, many providers.** HA entities/logbook, LLM Vision, Frigate and Nest,
-   plus custom events. Adding a provider must not touch the UI code.
+1. **One timeline, many providers.** HA entities/logbook, Event Reel, LLM Vision, Frigate
+   and Nest, plus custom events. Adding a provider must not touch the UI code.
 2. **Few hard dependencies.** The card needs nothing beyond Home Assistant core. Frigate,
-   LLM Vision and Nest are optional providers that add media and descriptions when they
-   are present. See §3.8.
+   Event Reel, LLM Vision and Nest are optional providers that add media and descriptions
+   when they are present. See §3.8.
 3. **Video first.** Camera events get a moving thumbnail. Tapping one plays the exact
    recorded clip inline, with no download needed.
 4. **Compact by default.** A full day fits on a phone screen without endless scrolling.
@@ -26,9 +27,14 @@ gitignored. Read it if it exists, and never copy its contents into tracked files
    `density: compact | comfortable`.
 5. **Easy to configure.** Works out of the box with auto-discovery, has a GUI editor for
    the common options, and supports YAML for everything else.
-6. **Frontend only.** No add-on or custom integration of its own. Everything goes through
-   APIs Home Assistant already exposes. Distributed through HACS as a "Dashboard"
-   (plugin) repository.
+6. **Frontend only.** The card itself goes only through APIs Home Assistant already
+   exposes, and is distributed through HACS as a "Dashboard" (plugin) repository. AI
+   analysis lives in a separate, optional companion integration, **Event Reel**
+   (`oddhus/event-reel`, a HACS "Integration" repository, §2.6). The card works the same
+   without it. Decided 2026-10-12, when LLM Vision was replaced on the reference install:
+   a Nest doorbell needs frames from its event clip, which only server-side code can fetch,
+   and the descriptions have to be kept for automations (daily summaries, notifications),
+   which a card can't do.
 
 **First target:** replace a "last 24 hours" dashboard view on the reference install that
 uses `llmvision-card` today (§9, M1).
@@ -36,9 +42,9 @@ uses `llmvision-card` today (§9, M1).
 ### Non-goals for v1
 
 - Live camera streams. Other cards (Advanced Camera Card etc.) already do this well.
-- Running AI analysis. The card displays results, and producers stay in automations,
-  LLM Vision or Frigate GenAI.
-- A backend or database of its own.
+- Running AI analysis in the card. The card displays results; producers are Frigate GenAI,
+  the Event Reel integration, LLM Vision or automations.
+- A backend or database inside the card. The Event Reel integration keeps its own events.
 - Depending on other custom cards.
 
 ---
@@ -230,6 +236,44 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
   for 90 s and reviews can last longer). 3 reviews had none.
 - 6 doorbell AI events (video analyzer on the Nest clip), all joinable by token.
 
+### 2.6 AI producers: Event Reel integration, AI Task, Frigate GenAI
+
+Checked 2026-10-11 and 2026-10-12 against HA 2026.9/2026.10 source and the reference
+install (HA 2026.10.1, Frigate 0.18.0, Ollama).
+
+- **Event Reel** (the companion integration, its own repository) stores events and serves
+  them over websocket:
+  - `event_reel/events/list` with `start_time`, `end_time` (ISO 8601), `cameras`, `limit`
+    (at most 5000) → `{ events: [...] }`, newest first. `start` is ISO with the local
+    offset; `end` may be `null`.
+  - `event_reel/events/subscribe` pushes `{ action: added | updated | removed, event }`.
+    The card only uses it to refetch.
+  - An event has `id`, `start`, `end`, `camera`, `title`, `description`, `category`,
+    `labels`, `key_frame` (a media source id, or an HA path for events added by
+    automations), `source` (`nest`, `trigger`, `service`), `analysis` (`ok`, `failed`,
+    `none`) and, for Nest, `nest: { device_id, event_token, video }`. The Nest token is the
+    same as in `media-source://nest/{device_id}/{token}` (§2.3), so the card builds the
+    clip and the `/thumbnail` still from it, as for LLM Vision.
+  - Detection: `hass.services.event_reel.get_events`.
+- **AI Task** (`ai_task.generate_data`, HA core): `structure` with selectors gives a JSON
+  answer. Attachments must be `media-source://camera/…` or `media-source://image/…`
+  snapshots, or media sources that resolve to a **local file** ("Only local attachments
+  are currently supported"). A Nest event clip resolves to a URL, so it can't be attached
+  directly; Event Reel fetches the clip through HA (a path signed for the content user),
+  takes frames with ffmpeg into the media folder, and attaches those.
+- **Nest cameras that stream with WebRTC** return a placeholder picture as their snapshot,
+  so snapshot-based analysis (core AI Task on `camera.*`, or LLM Vision's image analyzer)
+  sees nothing. Their event clips are the only usable frames.
+- **Thinking models:** with Ollama, `qwen3-vl:4b` (a thinking model) returned an empty
+  answer when a JSON format was requested; `qwen3-vl:4b-instruct` and `gemma3:4b` answer.
+  Small models also judge "is there real activity" more consistently when that field comes
+  after the description in the structure.
+- **Frigate GenAI review summaries** (0.17+, `review.genai`): Frigate 0.18 takes the model
+  from a `genai` provider with the `descriptions` role. A summary is written once a review
+  ends, into the review's `data.metadata` (`title`, `scene`, `shortSummary`, `confidence`,
+  `potential_threat_level`, `other_concerns`, §2.2), and published again on MQTT
+  `frigate/reviews` with `type: "genai"`. There is no API to summarize an old review again.
+
 ---
 
 ## 3. Architecture
@@ -384,8 +428,10 @@ Unit test every rule.
 
 Goal: one row per real-world moment, with the AI title and description plus the video.
 
-1. Split events into **text events** (LLM Vision with a camera) and **media events**
-   (Frigate reviews).
+1. Split events into **text events** (LLM Vision or Event Reel, with a camera) and
+   **media events** (Frigate reviews). Text events that share a Nest clip (the same ring
+   described by both AI producers) first collapse into one, with the later text in
+   `extra`.
 2. For each text event `T` on camera `c` at time `t`, the candidates are media events `M`
    on the same camera where `M.start - 15 s ≤ t ≤ (M.end ?? now) + 30 s`. Pick the
    nearest by `|t - M.start|`. These defaults matched 65 of 67 events on the reference
@@ -430,6 +476,7 @@ Goal: one row per real-world moment, with the AI title and description plus the 
 - Frigate: `frigate/reviews/subscribe`, then upsert on new/update/end. Unsubscribe with
   the `subscription_id`, and resubscribe after the HA connection reconnects.
 - LLM Vision: refetch (debounced to 2 s) when `calendar.llm_vision_timeline` changes.
+- Event Reel: refetch on each `event_reel/events/subscribe` message.
 - Fallback for everything: poll every `refresh_interval` (default 60 s) while the card
   is visible (`document.visibilityState`). A past day (§5.1) isn't polled; push updates
   and becoming visible still refresh it.
@@ -456,8 +503,10 @@ configured differently.
   `history/history_during_period`, `auth/sign_path`, `media_source/*`, the calendar API.
   The card must be useful with only these (entities, presence, calendars).
 - **Tier 1, core integrations:** Nest, reached only through media source.
-- **Tier 2, custom integrations:** the Frigate integration and LLM Vision. Optional
-  providers.
+- **Tier 2, custom integrations:** the Frigate integration, LLM Vision and the companion
+  Event Reel integration. Optional providers. Event Reel's services stay registered after
+  its entry is removed or fails to load; its list command then answers `not_loaded`,
+  which counts as missing.
   - Use only APIs present in their latest **released** version.
   - Prefer documented services over private REST endpoints.
   - Keep each in one provider file with a small parser covered by fixture tests, so a
@@ -465,6 +514,7 @@ configured differently.
 - **Detection** (`core/capabilities.ts`, at startup):
   - Frigate: any camera with `attributes.client_id`.
   - LLM Vision: `hass.services.llmvision?.get_events`.
+  - Event Reel: `hass.services.event_reel?.get_events`.
   - Nest: `hass.config.components` includes `nest`.
   - Optional routes (the Frigate time-range preview) are probed once per session and
     the result is cached.
@@ -507,7 +557,8 @@ frigate:                       # true | false | object
   show_unmatched: true
   hide_unconfirmed: false      # §3.5 rule 8
   clip_padding: [10, 20]       # seconds before/after
-nest: true                     # M1: doorbell clips for LLM Vision events; full provider P2
+event_reel: true               # true | false: the companion integration's AI events (§2.6)
+nest: true                     # doorbell clips for AI events; full provider P2
 calendars:                     # P2: any calendar entity, e.g. a Local Calendar
   - calendar.house_events
 camera_aliases:
@@ -1006,3 +1057,26 @@ refreshes while the page is hidden, a constant `getCardSize()`, no warning for a
 explicit `nest: true` without Nest, and eager loading of `*.local.json` fixtures in the
 dev harness. Suggested features: an unreviewed-only filter and a notice when
 `max_events` cuts rows.
+
+**2026-10-12, Event Reel review before publishing.** GPT-6-sol (xhigh) and a fresh Claude
+(Opus 5.5) context reviewed the new integration and the card's Event Reel provider. Fixed
+in the integration (its own repository and tests):
+- Removing or purging an event could delete any file an `add_event` image pointed to;
+  only frames the integration saved itself (`<day>/<id>.jpg`) are deleted now.
+- A ring after a moment where the AI saw nobody was lost during the cooldown, and a ring
+  could mark an older event that finished late. Trigger snapshots are now taken at the
+  trigger, not when the single worker gets to the job. A network error or an AI with no
+  answer within 3 minutes keeps the event without text instead of losing it.
+- Nest cameras without clips are described from the full picture, not the 175 px
+  thumbnail, and events record `nest.video`.
+- Websocket results and `get_events` called by a person are filtered by camera read
+  permission; `remove_event` is admin-only; `describe` takes only HA paths and media
+  sources; signed URLs never reach the log; purges announce removals; removing the
+  integration deletes its data.
+
+Fixed in the card: labels (`chime` reads "Rang the bell"), no clip for picture-only Nest
+events, the list limit clamped to 1–5000, `not_loaded` skipped quietly unless
+`event_reel` was set explicitly, and a ring described twice keeps both texts when the row
+also joins a Frigate review. Not changed: a reload cancels a running analysis (the caller
+of `describe` gets an error); naive websocket times were already read in HA's time zone,
+since HA sets the process time zone, and are now explicit.
