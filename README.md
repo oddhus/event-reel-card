@@ -102,7 +102,7 @@ HACS tells you when a new version is out; updating is one click.
    [latest release](https://github.com/oddhus/event-reel-card/releases/latest).
 2. Copy it to `config/www/event-reel-card.js` (create the `www` folder if needed).
 3. Add a dashboard resource: **Settings → Dashboards → ⋮ → Resources → Add resource**,
-   URL `/local/event-reel-card.js?v=0.2.1`, type **JavaScript module**.
+   URL `/local/event-reel-card.js?v=0.3.0`, type **JavaScript module**.
 4. Reload the browser and add the card as above.
 
 When you update by hand, change the `?v=` part of the resource URL too; `/local/` files

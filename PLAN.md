@@ -6,7 +6,7 @@ companion Event Reel integration or LLM Vision), Frigate
 review items with **animated thumbnails** and **the exact video clip**, Nest doorbell
 clips, and any other event you want to log.
 
-Status: v0.2.1 released 2026-10-11 (M1–M3 done, then loading and day navigation, then review fixes; §9). Unreleased: the Event Reel provider for the companion integration (§2.6). Reviews are logged in §12. This
+Status: v0.3.0 released 2026-10-13 (M1–M3 done, then loading and day navigation, review fixes, and the Event Reel provider for the companion integration; §9, §2.6). Reviews are logged in §12. This
 document is the brief for the implementing agent. Private details about the reference install
 (entity ids, hosts, camera mapping, deploy steps) live in `CLAUDE.local.md`, which is
 gitignored. Read it if it exists, and never copy its contents into tracked files.
