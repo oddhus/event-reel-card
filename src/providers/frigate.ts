@@ -33,9 +33,7 @@ async function getReviews(
   msg: Record<string, unknown>,
 ): Promise<FrigateReview[]> {
   const [unreviewed, reviewed] = await Promise.all(
-    [false, true].map(async (r) =>
-      parseWsResult<FrigateReview[]>(await hass.callWS({ ...msg, reviewed: r })),
-    ),
+    [false, true].map(async (r) => parseReviews(await hass.callWS({ ...msg, reviewed: r }))),
   );
   const byId = new Map<string, FrigateReview>();
   for (const review of [...unreviewed, ...reviewed]) byId.set(review.id, review);
@@ -45,6 +43,64 @@ async function getReviews(
 /** The integration passes Frigate's body through unparsed, so results are JSON strings. */
 export function parseWsResult<T>(result: unknown): T {
   return (typeof result === "string" ? JSON.parse(result) : result) as T;
+}
+
+type Fields = Record<string, unknown>;
+const isObject = (v: unknown): v is Fields => !!v && typeof v === "object" && !Array.isArray(v);
+const text = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+const texts = (v: unknown) =>
+  Array.isArray(v) ? v.filter((s): s is string => typeof s === "string" && !!s) : undefined;
+
+/** One review with the fields the card reads, or undefined when it lacks an id, camera or start. */
+function toReview(r: unknown): FrigateReview | undefined {
+  if (!isObject(r)) return undefined;
+  const id = text(r.id);
+  const camera = text(r.camera);
+  const start = r.start_time;
+  if (!id || !camera || typeof start !== "number" || !Number.isFinite(start)) return undefined;
+  const end = typeof r.end_time === "number" && Number.isFinite(r.end_time) ? r.end_time : null;
+  const data = isObject(r.data) ? r.data : {};
+  const meta = isObject(data.metadata) ? data.metadata : undefined;
+  return {
+    id,
+    camera,
+    start_time: start,
+    end_time: end,
+    severity: typeof r.severity === "string" ? r.severity : "",
+    thumb_path: text(r.thumb_path),
+    has_been_reviewed: !!r.has_been_reviewed,
+    data: {
+      objects: texts(data.objects),
+      sub_labels: Array.isArray(data.sub_labels)
+        ? data.sub_labels.filter(
+            (s): s is string | [string, number] =>
+              typeof s === "string" || (Array.isArray(s) && typeof s[0] === "string"),
+          )
+        : undefined,
+      zones: texts(data.zones),
+      metadata: meta
+        ? {
+            title: text(meta.title),
+            shortSummary: text(meta.shortSummary),
+            scene: text(meta.scene),
+          }
+        : null,
+    },
+  };
+}
+
+/**
+ * Reviews from a `frigate/reviews/get` result. A malformed record is skipped instead of
+ * failing the whole provider; an answer that isn't a list (an error body) still fails it.
+ */
+export function parseReviews(result: unknown): FrigateReview[] {
+  const list = parseWsResult<unknown>(result);
+  if (!Array.isArray(list)) throw new Error("Frigate returned no review list");
+  const reviews = list.map(toReview).filter((r): r is FrigateReview => !!r);
+  if (reviews.length < list.length) {
+    console.debug(`[event-reel] skipped ${list.length - reviews.length} malformed Frigate reviews`);
+  }
+  return reviews;
 }
 
 const cleanLabel = (label: string) => label.replace(/-verified$/, "");

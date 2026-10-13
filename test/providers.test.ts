@@ -9,7 +9,7 @@ import {
   logbookToEvents,
 } from "../src/providers/entity";
 import type { EntityHelpers } from "../src/providers/entity";
-import { parseWsResult, reviewToEvent } from "../src/providers/frigate";
+import { parseReviews, parseWsResult, reviewToEvent } from "../src/providers/frigate";
 import type { FrigateReview } from "../src/providers/frigate";
 import { createLlmVisionProvider, llmvisionToEvents } from "../src/providers/llmvision";
 import { NestTokenResolver } from "../src/providers/nest";
@@ -742,6 +742,85 @@ describe("Frigate reviews", () => {
     expect(parseWsResult([review])).toEqual([review]);
   });
 
+  it("skips malformed records and drops fields of the wrong type", () => {
+    const parsed = parseReviews(
+      JSON.stringify([
+        review,
+        { ...review, id: undefined },
+        { ...review, id: "no-camera", camera: "" },
+        { ...review, id: "text-start", start_time: "1791450000" },
+        null,
+        "1791450000.5-x",
+        {
+          id: "odd",
+          camera: "garage",
+          start_time: 1791451000,
+          end_time: "soon",
+          severity: "detection",
+          data: {
+            objects: ["car", 7, null],
+            sub_labels: [3, ["Sam", 0.8]],
+            metadata: { title: 5 },
+          },
+        },
+      ]),
+    );
+    expect(parsed.map((r) => r.id)).toEqual(["1791450000.123456-abc123", "odd"]);
+    expect(parsed[1]).toMatchObject({
+      end_time: null,
+      data: {
+        objects: ["car"],
+        sub_labels: [["Sam", 0.8]],
+        metadata: { title: undefined, shortSummary: undefined, scene: undefined },
+      },
+    });
+  });
+
+  it("passes a valid review through with the fields the card reads", () => {
+    const full = {
+      id: "1791450000.5-def",
+      camera: "garage",
+      start_time: 1791450000.5,
+      end_time: null,
+      severity: "detection",
+      thumb_path: "/media/frigate/clips/review/thumb-garage-1791450000.5-def.webp",
+      has_been_reviewed: true,
+      data: {
+        detections: ["1791450000.4-ghi"],
+        objects: ["car"],
+        sub_labels: ["Sam"],
+        zones: ["driveway"],
+        metadata: {
+          title: "Car parks",
+          shortSummary: "A car parks.",
+          scene: "Driveway",
+          confidence: 0.8,
+        },
+      },
+    };
+    expect(parseReviews([full])).toEqual([
+      {
+        id: "1791450000.5-def",
+        camera: "garage",
+        start_time: 1791450000.5,
+        end_time: null,
+        severity: "detection",
+        thumb_path: "/media/frigate/clips/review/thumb-garage-1791450000.5-def.webp",
+        has_been_reviewed: true,
+        data: {
+          objects: ["car"],
+          sub_labels: ["Sam"],
+          zones: ["driveway"],
+          metadata: { title: "Car parks", shortSummary: "A car parks.", scene: "Driveway" },
+        },
+      },
+    ]);
+  });
+
+  it("fails on an answer that isn't a list", () => {
+    expect(() => parseReviews({ success: false, message: "Unknown camera" })).toThrow();
+  });
+
   it("maps a review with media refs and a localized title", () => {
     const e = reviewToEvent(review, "frigate", { cameras, localize: getLocalize("nb") });
     expect(e).toMatchObject({
@@ -805,6 +884,29 @@ describe("Frigate fetch", () => {
     expect(events.map((e) => [e.id, e.reviewed])).toEqual([
       ["frigate:frigate:b", true],
       ["frigate:frigate:a", false],
+    ]);
+  });
+
+  it("keeps the other reviews when one record is malformed", async () => {
+    const good = { id: "a", camera: "entrance", start_time: 10, end_time: 15, severity: "alert" };
+    const hass = {
+      callWS: async (msg: Record<string, unknown>) =>
+        msg.reviewed ? "[]" : JSON.stringify([{ ...good, data: { objects: [null] } }, { id: 4 }]),
+    };
+    const { frigateProvider } = await import("../src/providers/frigate");
+    const { normalizeConfig } = await import("../src/config");
+    const events = await frigateProvider.fetch(
+      { start: 0, end: 100 },
+      {
+        hass: hass as never,
+        config: normalizeConfig({ type: "x" }),
+        cameras,
+        localize: getLocalize("en"),
+        now: 100,
+      },
+    );
+    expect(events.map((e) => [e.id, e.title])).toEqual([
+      ["frigate:frigate:a", "Activity at Entrance"],
     ]);
   });
 });

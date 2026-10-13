@@ -133,8 +133,10 @@ Review item shape (sample, ids replaced):
 ```
 `end_time` is `null` while the activity is ongoing. `data.metadata` holds Frigate GenAI
 review summaries (`title`, `scene`, `shortSummary`, `confidence`,
-`potential_threat_level`, `other_concerns`) when `review.genai` is enabled in Frigate.
-Use them when present.
+`potential_threat_level`, `other_concerns`; Frigate 0.18 also writes `observations` and
+`time`) when `review.genai` is enabled in Frigate. Use them when present. The card keeps
+only the fields it reads and skips a record without an `id`, a `camera` or a numeric
+`start_time`. An answer that isn't a list still fails the provider.
 
 HTTP media through the integration proxy. `{iid}` is the instance id.
 
@@ -1113,6 +1115,8 @@ risks in the code and on Frigate. Fixed for 0.3.1:
   keeps it (and keyboard focus) in place; a day switch clears it. Event Reel and LLM
   Vision fetch at least 500 events (twice `max_events` above that), as Frigate already
   did, so the filters have older events to find.
+- A malformed Frigate review (no id, camera or start, or a non-string label) failed the
+  whole Frigate load; it is skipped now (§2.2).
 
 Not a bug: the clip of an ongoing review asks for up to 15 s past now, which Frigate
 answers with what it has (§2.2, S4). Firefox and iOS playback is partly checked (S1). On
