@@ -18,3 +18,12 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  # HACS checks the repository (hacs.json, release, README images, topics) before it can be
+  # listed in HACS's default repositories; it must pass before the release that is submitted.
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: plugin

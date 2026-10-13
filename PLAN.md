@@ -790,10 +790,15 @@ to the clip.
   "render_readme": true, "homeassistant": "<min>" }`. Set the minimum HA version from
   the APIs actually used (`getConfigForm`, `formatEntityState`, `getGridOptions`).
 - GitHub Actions:
-  - `ci.yml`: on push/PR, run `npm ci && npm run lint && npm test && npm run build`.
+  - `ci.yml`: on push/PR, run `npm ci && npm run lint && npm test && npm run build`, and
+    the HACS Action (`hacs/action@main`, category `plugin`, as HACS documents it).
   - `release.yml`: on tag `v*`, build and attach `dist/event-reel-card.js` to the GitHub
     release.
 - Use SemVer, starting at `v0.1.0`. Keep a `CHANGELOG.md`.
+- HACS default repositories (checked 2026-10-13 in HACS's "include" guide): the HACS
+  Action must pass with no ignores, then a full GitHub release (not just a tag) must follow,
+  then a PR to `hacs/default` adds the repository. Reviews take months. The card can be
+  submitted on its own; the brands check only applies to integrations.
 - Test installing the tagged release through HACS, not only a local `dist/` copy.
 - The README covers features, a screenshot or GIF (from the dev harness with neutral
   footage, never private camera footage without the owner's OK), install
