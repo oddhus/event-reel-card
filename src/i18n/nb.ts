@@ -80,6 +80,7 @@ export const nb: Strings = {
   "filter.all_cameras": "Alle kameraer",
   "filter.camera": "Kamera",
   "filter.clear": "Vis alle",
+  "list.capped": "Eldre hendelser som ikke vises: {count} (grense {max}).",
   "action.mark_reviewed": "Merk som sett",
   "action.mark_all_reviewed": "Merk alle som sett",
   "action.mark_all_reviewed_n": "Merk alle {count} som sett",

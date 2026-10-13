@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `max_events` now applies after the category and camera filters. Before, the card kept
+  the newest events first and filtered after, so a filter could show too few rows, or
+  none, while older matches existed. A note under the list says how many older events
+  are hidden, and a deep link to an older event still opens it. Event Reel and LLM Vision
+  events are fetched up to 500 (or twice `max_events`) for the filters to search. An open
+  camera group shows at most `max_events` events too.
+
 ## [0.3.0] - 2026-10-13
 
 ### Added

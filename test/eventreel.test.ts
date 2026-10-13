@@ -175,14 +175,14 @@ describe("Event Reel provider", () => {
       type: "event_reel/events/list",
       start_time: "2026-10-08T00:00:00.000Z",
       end_time: "2026-10-08T23:59:59.000Z",
-      limit: 100,
+      limit: 500,
     });
     expect(events.map((e) => e.id)).toEqual(["event_reel:abc"]);
   });
 
   it("keeps the limit inside what the integration accepts", async () => {
     const limits = [];
-    for (const max_events of [6000, 150.5, 10]) {
+    for (const max_events of [6000, 400.3, 10]) {
       const callWS = vi.fn().mockResolvedValue({ events: [] });
       const hass = { callWS, states: {} } as unknown as HomeAssistant;
       const config = normalizeConfig({ type: "custom:event-reel-card", max_events });
@@ -192,7 +192,7 @@ describe("Event Reel provider", () => {
       );
       limits.push(callWS.mock.calls[0][0].limit);
     }
-    expect(limits).toEqual([5000, 151, 100]);
+    expect(limits).toEqual([5000, 800, 500]);
   });
 
   it("skips an integration that isn't loaded quietly, unless it was asked for", async () => {

@@ -168,6 +168,11 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
   reference install most camera events come from that camera, so the codec fallback is a
   main path, not an edge case (§5.4).
 - Never auto-download the MP4. Download only on an explicit button press.
+- **Ranges that end in the future** (checked on Frigate 0.18 directly, 2026-10-13): a VOD
+  manifest or `clip.mp4` whose end is up to 20 s ahead returns the same segments as one
+  ending now, so the padding after an ongoing review's "now − 5 s" is harmless. A range
+  that starts in the future gets 404 (VOD) or 400 (`clip.mp4`). A range past retention
+  gets 404, which the player shows as "deleted".
 
 ### 2.3 Nest (core integration, through HA media source)
 
@@ -535,7 +540,7 @@ title: Today's events          # optional; hidden when empty
 density: compact               # compact | comfortable
 range: 24h                     # 24h (rolling, default) | today | <hours>
 preview: visible               # visible | hover | still | off   (animated thumbnails)
-max_events: 200
+max_events: 200                # newest events shown after the filters; a note counts the rest
 language: auto                 # auto (HA user language) | en | nb
 
 entities:                      # core provider: state changes from the logbook
@@ -809,12 +814,20 @@ to the clip.
   Browsers hold back playback in hidden tabs, so the start timeout pauses while the page
   is hidden. The owner confirmed playback in the Companion app on their phone. Firefox
   and the other mobile platform are still open.
+  *Firefox 157 on Windows (2026-10-13, headless, hls.js light, real recordings through a
+  local proxy, not HA):* it reports `hev1`/`hvc1` as supported (`isTypeSupported` and
+  `canPlayType` "probably"). H.264 2880×1616 played (848 frames in 28 s). The 4K HEVC clip
+  failed with a decode error (`RemoteMediaManager is not available`), and hls.js raised a
+  fatal media error, which is what the card's codec fallback reacts to. Headless Firefox
+  has no remote decoder process, so HEVC in a normal Firefox window is still open.
 - S2. `frigate/reviews/subscribe` payload shape and behaviour after a reconnect. *From
   source:* the payload is the raw MQTT JSON string; the subscription registers in
   `connection.subscriptions`, so HA's generic unsubscribe works. The card only refetches on
   a message, so the shape doesn't matter.
 - S3. The review still through `clips/review/...` via HA. *Done:* loads through HA.
 - S4. VOD for an ongoing review (`end_time: null`) and for a review past retention.
+  *Done on Frigate directly (2026-10-13):* an end in the future is harmless, and past
+  retention is a 404 (§2.2).
 - S5. A lock's `changed_by` through `history/history_during_period` with attributes.
   *Done:* all lock changes on the reference install got an actor.
 - S6. Whether the LLM Vision calendar entity changes state right after a new event.
@@ -1080,3 +1093,41 @@ events, the list limit clamped to 1–5000, `not_loaded` skipped quietly unless
 also joins a Frigate review. Not changed: a reload cancels a running analysis (the caller
 of `describe` gets an error); naive websocket times were already read in HA's time zone,
 since HA sets the process time zone, and are now explicit.
+
+**2026-10-13, what next after 0.3.0.** GPT-6-sol (xhigh) ranked a reliability release
+before new features, then a HACS default-list submission (the card can go before the
+integration; HACS needs the HACS Action to pass and a release after that), then context
+bands with a threat badge only after looking at real values. Claude (Opus 5.5) checked its
+risks in the code and on Frigate. Fixed for 0.3.1:
+- `max_events` cut the newest events before the category and camera filters, so a filter
+  could come up short or empty while older matches existed, and nothing said rows were
+  cut. The cap now applies to the filtered rows (`capItems`; a group across the limit stays
+  whole), and a note under the list counts the rest. Chip counts cover the whole range;
+  "mark all" and the day strip cover the rows shown. The list always reaches the last row
+  opened or linked to (`_reach`), so a deep link past the cap opens, and closing that row
+  keeps it (and keyboard focus) in place; a day switch clears it. Event Reel and LLM
+  Vision fetch at least 500 events (twice `max_events` above that), as Frigate already
+  did, so the filters have older events to find.
+
+Not a bug: the clip of an ongoing review asks for up to 15 s past now, which Frigate
+answers with what it has (§2.2, S4). Firefox and iOS playback is partly checked (S1). On
+the reference install all four GenAI summaries so far had `potential_threat_level` 0, so a
+threat badge would rarely show there.
+
+GPT-6-sol (xhigh) and a fresh Claude (Opus 5.5) context then reviewed the first version.
+Both found that closing a deep-linked row past the cap removed it and lost keyboard focus,
+that a burst link kept the list long, and that provider fetch limits still followed
+`max_events`; `_reach` and the higher limits above came out of that. Also fixed from the
+Claude review:
+- Grouping now sees every event in range, so one busy camera can form a very large group.
+  An open group shows at most `max_events` events (`capList`), with the same note.
+- The note said "only the newest N are shown", which is wrong when a whole group or a kept
+  row shows more. It now counts what is hidden and names the limit. `max_events` is
+  rounded.
+- The render order (filter, then cap) is a pure `visibleRows` with a test where capping
+  first would show no matches; presence grouping no longer copies its list per event.
+
+Not changed: the note counts only fetched events, so it can't report events past a
+provider's fetch limit. The recompute now groups and stabilizes every in-range event
+instead of the newest `max_events`; merging already handled all of them, and only noisy
+entities over long ranges would notice.

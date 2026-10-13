@@ -136,7 +136,7 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
     density: oneOf(config.density, ["compact", "comfortable"] as const, "compact"),
     range: parseRange(config.range ?? "24h"),
     preview: oneOf(config.preview, ["visible", "hover", "still", "off"] as const, "visible"),
-    maxEvents: num(config.max_events, 200, 1),
+    maxEvents: Math.round(num(config.max_events, 200, 1)),
     language: typeof config.language === "string" ? config.language : "auto",
     refreshInterval: num(config.refresh_interval, 60, 10),
     entities,

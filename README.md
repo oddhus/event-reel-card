@@ -158,7 +158,7 @@ cameras:
 | `density` | `compact` | `compact` or `comfortable` (bigger previews, two-line descriptions). |
 | `preview` | `visible` | Animated previews: `visible`, `hover`, `still` or `off`. |
 | `language` | `auto` | `auto` (your HA language), `en` or `nb`. |
-| `max_events` | `200` | Most events to show. |
+| `max_events` | `200` | Most events to show, counted after the filters. A note under the list says how many older ones are hidden. |
 | `refresh_interval` | `60` | Seconds between refreshes while the card is visible. |
 | `filters` | `true` | Show the category chips and camera menu. |
 | `day_strip` | `true` | Show the 24-hour strip. |

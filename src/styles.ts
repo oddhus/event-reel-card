@@ -27,6 +27,13 @@ export const styles = css`
     color: var(--secondary-text-color);
     text-align: center;
   }
+  .capped {
+    margin: 0;
+    padding: 0 16px 12px;
+    font-size: 0.85em;
+    color: var(--secondary-text-color);
+    text-align: center;
+  }
 
   .warnings {
     display: flex;

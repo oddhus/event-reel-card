@@ -162,7 +162,9 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
   for (const e of ascending) {
     if (mediaKey(e) || e.category !== "presence") continue;
     const key = e.entityId ?? e.id;
-    presence.set(key, [...(presence.get(key) ?? []), e]);
+    const list = presence.get(key) ?? [];
+    list.push(e);
+    presence.set(key, list);
   }
   for (const list of presence.values()) pushBursts(list);
 
