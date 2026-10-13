@@ -13,6 +13,8 @@ All notable changes to this project are documented here. The project uses
   are hidden, and a deep link to an older event still opens it. Event Reel and LLM Vision
   events are fetched up to 500 (or twice `max_events`) for the filters to search. An open
   camera group shows at most `max_events` events too.
+- One malformed review from Frigate no longer stops all Frigate events from loading; the
+  card skips it.
 
 ## [0.3.0] - 2026-10-13
 
