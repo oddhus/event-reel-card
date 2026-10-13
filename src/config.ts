@@ -33,6 +33,8 @@ export interface FrigateConfig extends ProviderToggle {
 
 export type NestConfig = ProviderToggle;
 
+export type EventReelConfig = ProviderToggle;
+
 export interface CameraOverride {
   clip?: "auto" | "preview";
   name?: string;
@@ -51,6 +53,8 @@ export interface CardConfig {
   llmvision?: boolean | Partial<Omit<LlmVisionConfig, "explicit">>;
   frigate?: boolean | Partial<Omit<FrigateConfig, "explicit">>;
   nest?: boolean | { enabled?: boolean };
+  /** The Event Reel integration (AI descriptions). */
+  event_reel?: boolean | { enabled?: boolean };
   camera_aliases?: Record<string, string>;
   cameras?: Record<string, CameraOverride>;
   grouping?: { window?: number };
@@ -75,6 +79,7 @@ export interface NormalizedConfig {
   llmvision: LlmVisionConfig;
   frigate: FrigateConfig;
   nest: NestConfig;
+  event_reel: EventReelConfig;
   cameraAliases: Record<string, string>;
   cameras: Record<string, CameraOverride>;
   groupingWindow: number;
@@ -149,6 +154,7 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
       clip_padding: [num(padding[0], 10), num(padding[1], 20)],
     },
     nest: toggle(config.nest),
+    event_reel: toggle(config.event_reel),
     cameraAliases: obj<Record<string, string>>(config.camera_aliases) as Record<string, string>,
     cameras: obj<Record<string, CameraOverride>>(config.cameras) as Record<string, CameraOverride>,
     groupingWindow: num(config.grouping?.window, 120),

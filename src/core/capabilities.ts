@@ -6,6 +6,7 @@ import type { CameraRegistry } from "./cameras";
 
 export interface Capabilities {
   llmvision: boolean;
+  event_reel: boolean;
   frigate: boolean;
   nest: boolean;
 }
@@ -14,6 +15,7 @@ export function detectCapabilities(hass: HomeAssistant, cameras: CameraRegistry)
   const components = hass.config?.components ?? [];
   return {
     llmvision: !!hass.services?.llmvision?.get_events,
+    event_reel: !!hass.services?.event_reel?.get_events,
     frigate: cameras.frigateInstances().length > 0,
     nest: components.includes("nest"),
   };
@@ -23,7 +25,7 @@ export type ProviderStatus = "active" | "off" | "missing";
 
 /** "missing" is shown as a warning only for providers the user configured explicitly. */
 export function providerStatus(
-  type: "entity" | "llmvision" | "frigate",
+  type: "entity" | "llmvision" | "event_reel" | "frigate",
   config: NormalizedConfig,
   caps: Capabilities,
 ): ProviderStatus {

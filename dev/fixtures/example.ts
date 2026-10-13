@@ -3,11 +3,14 @@
 
 import type { LogbookEntry } from "../../src/providers/entity";
 import type { FrigateReview } from "../../src/providers/frigate";
+import type { EventReelRecord } from "../../src/providers/eventreel";
 import type { LlmVisionEvent } from "../../src/providers/llmvision";
 
 export interface ExampleData {
   reviews: FrigateReview[];
   llmvision: LlmVisionEvent[];
+  /** The same AI descriptions as the Event Reel integration stores them. */
+  eventReel: EventReelRecord[];
   logbook: LogbookEntry[];
   history: Record<string, { s: string; a: Record<string, unknown>; lu: number }[]>;
   nestToken: string;
@@ -20,6 +23,7 @@ export function exampleData(now: number): ExampleData {
   const h = (hoursAgo: number) => Math.floor(now - hoursAgo * 3600);
   const reviews: FrigateReview[] = [];
   const llmvision: LlmVisionEvent[] = [];
+  const eventReel: EventReelRecord[] = [];
   const logbook: LogbookEntry[] = [];
   const history: ExampleData["history"] = { "lock.front_door": [] };
 
@@ -43,8 +47,29 @@ export function exampleData(now: number): ExampleData {
     });
     return start;
   };
-  const ai = (camera: string, start: number, title: string, description: string, uid: string) =>
-    llmvision.push({
+  const reelCamera = (camera: string) =>
+    camera.startsWith("image.") ? camera.replace(/^image.(.*)_person$/, "camera.$1") : camera;
+  const ai = (
+    camera: string,
+    start: number,
+    title: string,
+    description: string,
+    uid: string,
+    category = "person",
+  ) => {
+    eventReel.push({
+      id: `reel-${uid}`,
+      start: iso(start),
+      camera: reelCamera(camera),
+      title,
+      description,
+      category,
+      labels: [category],
+      key_frame: `media-source://media_source/local/event_reel/${uid}.jpg`,
+      source: "trigger",
+      analysis: "ok",
+    });
+    return llmvision.push({
       uid,
       title,
       description,
@@ -55,6 +80,7 @@ export function exampleData(now: number): ExampleData {
       category: "person",
       label: "person",
     });
+  };
 
   const entry = (start: number) => {
     const lockSeq: [number, string][] = [
@@ -137,6 +163,19 @@ export function exampleData(now: number): ExampleData {
     category: "",
     label: "",
   });
+  eventReel.push({
+    id: "reel-ex-4",
+    start: iso(h(3) - 1),
+    camera: "camera.doorbell",
+    title: "Child in a red hat at the door",
+    description: "A child in a red hat presses the doorbell and waits on the step.",
+    category: "doorbell",
+    labels: ["person", "chime"],
+    key_frame: "media-source://media_source/local/event_reel/ex-4.jpg",
+    source: "nest",
+    nest: { device_id: "nest-device-1", event_token: nestToken },
+    analysis: "ok",
+  });
 
   // Evening: back home.
   t = review("entrance", h(1.2), 35);
@@ -157,7 +196,8 @@ export function exampleData(now: number): ExampleData {
     "Cat crosses the yard",
     "A grey cat walks along the fence.",
     "ex-6",
+    "animal",
   );
 
-  return { reviews, llmvision, logbook, history, nestToken };
+  return { reviews, llmvision, eventReel, logbook, history, nestToken };
 }

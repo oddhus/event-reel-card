@@ -6,9 +6,11 @@ A Home Assistant dashboard card that shows **one compact timeline of the day's e
   (`Front door: Unlocked · Open · Closed · Locked`)
 - camera activity with **animated previews** and the **exact recorded clip** from
   [Frigate](https://frigate.video), played inline
-- AI descriptions from [LLM Vision](https://github.com/valentinfrlch/ha-llmvision) (and
-  Frigate GenAI review summaries), merged with the matching video
-- Nest doorbell clips for doorbell events analysed by LLM Vision
+- AI descriptions from Frigate GenAI review summaries, the companion
+  [Event Reel integration](https://github.com/oddhus/event-reel) or
+  [LLM Vision](https://github.com/valentinfrlch/ha-llmvision), merged with the matching
+  video
+- Nest doorbell clips for doorbell events described by AI
 - any event you log yourself
 
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=oddhus&repository=event-reel-card&category=plugin)
@@ -57,8 +59,16 @@ integration beyond core is optional:
 |---|---|---|
 | Entities | Home Assistant only (logbook and history) | Door, lock, presence and other state changes |
 | Frigate | The [Frigate integration](https://github.com/blakeblackshear/frigate-hass-integration) | Review items, animated previews, exact clips, mark reviewed |
+| Event Reel | The [Event Reel integration](https://github.com/oddhus/event-reel) and an AI Task in Home Assistant | AI titles and descriptions for Nest doorbells and any camera, with the AI you already use (a local Ollama model, for example) |
 | LLM Vision | [LLM Vision](https://github.com/valentinfrlch/ha-llmvision) with the timeline enabled | AI titles and descriptions |
-| Nest | The Nest integration (core) | Doorbell clips for LLM Vision doorbell events |
+| Nest | The Nest integration (core) | Doorbell clips for Event Reel and LLM Vision doorbell events |
+
+Frigate 0.17 and newer can also write AI summaries of its own reviews (`review.genai` in
+the Frigate config). The card shows them on the Frigate rows without anything else.
+
+For AI descriptions you need one of these, not all. Event Reel is the companion
+integration: it describes Nest doorbell clips, which a snapshot can't, and cameras outside
+Frigate, and keeps the descriptions for the card and your automations.
 
 The card detects what is installed. Sources you haven't configured and don't have are
 skipped quietly. A source you configured explicitly shows a warning chip if it's missing.
@@ -110,7 +120,7 @@ entities:
   - person.alex
 ```
 
-Frigate and LLM Vision are picked up automatically when they're installed.
+Frigate, Event Reel and LLM Vision are picked up automatically when they're installed.
 
 A fuller example:
 
@@ -156,8 +166,9 @@ cameras:
 | `entities` | none | Entities whose state changes appear. An item is an entity id or an object with `entity`, `name`, `icon`, `category`, `states` (labels per state), `only_states` and `actor_attribute`. |
 | `llmvision` | auto | `true`, `false`, or an object with `non_camera` (default `true`), `categories` and `enabled`. |
 | `frigate` | auto | `true`, `false`, or an object with `cameras` (`auto` or a list), `severity` (default `[alert, detection]`), `show_unmatched` (default `true`), `hide_unconfirmed` (default `false`), `clip_padding` (default `[10, 20]` seconds) and `enabled`. |
+| `event_reel` | auto | `true` or `false`: AI descriptions from the Event Reel integration. |
 | `nest` | auto | `true` or `false`. Used for doorbell clips. |
-| `camera_aliases` | none | Maps another camera entity (or an LLM Vision camera name) to a canonical camera, e.g. a Reolink entity to the Frigate camera of the same device. |
+| `camera_aliases` | none | Maps another camera entity (or an LLM Vision camera name) to a canonical camera, e.g. a Reolink entity to the Frigate camera of the same device. Applies to Event Reel events too. |
 | `cameras` | none | Per camera entity: `name`, and `clip: auto` or `preview`. |
 | `grouping.window` | `120` | Seconds between events that still group into one row. |
 | `merge.before` / `merge.after` | `15` / `30` | How far (seconds) an AI event may lie before the start or after the end of a Frigate review and still be merged with it. |
@@ -188,20 +199,26 @@ From easiest to most powerful:
      message: Post arrived
    ```
 
-3. **`llmvision.create_event`**, which is stored permanently in the LLM Vision timeline.
-   It shows as long as `llmvision.non_camera` is `true` (the default).
+3. **`event_reel.add_event`**, with the Event Reel integration. The event is kept for the
+   integration's retention (30 days by default), with an image if you give one, and it
+   joins the camera's Frigate clip when you name the camera.
 
    ```yaml
-   action: llmvision.create_event
+   action: event_reel.add_event
    data:
      title: Package delivered
      description: A package was left by the door.
+     camera: camera.entrance
+     category: package
    ```
+
+4. **`llmvision.create_event`**, which is stored permanently in the LLM Vision timeline.
+   It shows as long as `llmvision.non_camera` is `true` (the default).
 
 ## Deep links
 
-Add `?reel=<id>` to the dashboard URL to open one event. `<id>` can be a Frigate review id
-or an LLM Vision event uid. For example, a notification for a Frigate review:
+Add `?reel=<id>` to the dashboard URL to open one event. `<id>` can be a Frigate review id,
+an Event Reel event id or an LLM Vision event uid. For example, a notification for a Frigate review:
 
 ```yaml
 action: notify.mobile_app_phone
@@ -229,9 +246,10 @@ retention.
 notification proxy. If you disabled that option in the integration, the card falls back
 to still images.
 
-**A doorbell event has no clip.** Doorbell clips need the Nest integration, and the LLM
-Vision event must have been created from the Nest attachment (`video_analyzer` on
-`trigger.event.data.attachment.video`).
+**A doorbell event has no clip.** Doorbell clips need the Nest integration, and a Nest
+camera that records clips (older models only take pictures). Event Reel links the clip
+for you. An LLM Vision event must have been created from the Nest attachment
+(`video_analyzer` on `trigger.event.data.attachment.video`).
 
 **The card didn't change after an update.** Bump the `?v=` on the resource URL (manual
 installs), or reload the frontend cache. In the Companion app: **Settings → Companion

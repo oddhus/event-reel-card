@@ -16,7 +16,7 @@ import { groupTimeline } from "./core/grouping";
 import type { BurstSegment, TimelineItem } from "./core/grouping";
 import { Loader } from "./core/loader";
 import { MediaResolver } from "./core/media";
-import { mergeEvents } from "./core/merge";
+import { AI_PROVIDERS, mergeEvents } from "./core/merge";
 import { nearestItem, stripModel, timeAt } from "./core/strip";
 import {
   browserTimeZone,
@@ -34,6 +34,7 @@ import type { Category } from "./types";
 import type { HomeAssistant } from "./ha-types";
 import { getLocalize, objectLabel, resolveLanguage } from "./i18n";
 import { createEntityProvider, latestEntityChangeBefore } from "./providers/entity";
+import { createEventReelProvider, latestEventReelBefore } from "./providers/eventreel";
 import { frigateProvider, latestReviewBefore, markReviewed } from "./providers/frigate";
 import {
   createLlmVisionProvider,
@@ -49,7 +50,7 @@ import "./ui/strip";
 
 export type { CardConfig as EventReelCardConfig };
 
-type ProviderType = "entity" | "llmvision" | "frigate";
+type ProviderType = "entity" | "llmvision" | "event_reel" | "frigate";
 
 /** Overridable clock (epoch seconds), for the dev harness. */
 export const clock = { now: () => Date.now() / 1000 };
@@ -65,6 +66,7 @@ const dataKey = (c: NormalizedConfig) =>
   JSON.stringify([
     c.entities,
     c.llmvision,
+    c.event_reel,
     { ...c.frigate, show_unmatched: 0, hide_unconfirmed: 0, clip_padding: 0 },
     c.nest,
     c.range,
@@ -133,7 +135,12 @@ export class EventReelCard extends LitElement {
   private _range?: TimeRange;
   private _resolver = new MediaResolver(() => this._hass);
   private _entity = createEntityProvider();
-  private _providers: Provider[] = [this._entity, createLlmVisionProvider(), frigateProvider];
+  private _providers: Provider[] = [
+    this._entity,
+    createLlmVisionProvider(),
+    createEventReelProvider(),
+    frigateProvider,
+  ];
   private _localize: Localize = getLocalize("en");
   private _language = "en";
   private _started = false;
@@ -599,6 +606,9 @@ export class EventReelCard extends LitElement {
         ),
       );
     }
+    if (this._status("event_reel") === "active") {
+      tasks.push(latestEventReelBefore(hass, range.start).catch(() => undefined));
+    }
     if (this._status("frigate") === "active") {
       tasks.push(latestReviewBefore(ctx, range.start).catch(() => undefined));
     }
@@ -934,15 +944,13 @@ export class EventReelCard extends LitElement {
     const player = e.frigate || e.clip;
     const override = e.camera ? this._config?.cameras[e.camera]?.clip : undefined;
     const labels = (e.labels ?? []).map((l) => objectLabel(t, l));
+    // "AI + Frigate" when AI text was joined to another provider's media.
+    const media = e.sources.filter((s) => !AI_PROVIDERS.includes(s));
+    const fromAi = media.length < e.sources.length;
     const chips = [
       ...labels,
-      ...(e.sources.length > 1
-        ? [
-            `${t("sources.ai")} + ${e.sources
-              .filter((s) => s !== "llmvision")
-              .map((s) => t(`provider.${s}`))
-              .join(" + ")}`,
-          ]
+      ...(fromAi && media.length
+        ? [`${t("sources.ai")} + ${media.map((s) => t(`provider.${s}`)).join(" + ")}`]
         : []),
     ];
     return html`
