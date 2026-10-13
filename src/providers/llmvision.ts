@@ -104,8 +104,11 @@ export function createLlmVisionProvider(nest = new NestTokenResolver()): Provide
       const serviceData: Record<string, unknown> = {
         start: formatLocalDateTime(range.start, tz),
         end: formatLocalDateTime(range.end, tz),
-        // Non-camera events are dropped below, so ask for enough to still fill the list.
-        limit: cfg.non_camera ? ctx.config.maxEvents : Math.max(ctx.config.maxEvents * 5, 1000),
+        // More than max_events, since the cap applies after the card's filters, and more still
+        // when non-camera events are dropped below.
+        limit: cfg.non_camera
+          ? Math.max(ctx.config.maxEvents * 2, 500)
+          : Math.max(ctx.config.maxEvents * 5, 1000),
         include_no_activity: false,
       };
       if (cfg.categories.length) serviceData.categories = cfg.categories;

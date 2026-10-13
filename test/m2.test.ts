@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { findEvent, parseReelParam } from "../src/core/deeplink";
-import { applyFilters, cameraOptions, summarize } from "../src/core/filters";
+import {
+  applyFilters,
+  cameraOptions,
+  capItems,
+  capList,
+  summarize,
+  visibleRows,
+} from "../src/core/filters";
 import { groupTimeline } from "../src/core/grouping";
+import type { TimelineItem } from "../src/core/grouping";
 import { nearestItem, stripModel, timeAt } from "../src/core/strip";
 import { configToForm, formToConfig } from "../src/editor-model";
 import type { CardConfig } from "../src/config";
@@ -69,6 +77,105 @@ describe("filters", () => {
 
   it("returns everything without filters", () => {
     expect(applyFilters(items, { categories: new Set() })).toBe(items);
+  });
+});
+
+describe("max_events cap", () => {
+  // Items newest first, as groupTimeline returns them; `n` events each.
+  const row = (id: string, n: number): TimelineItem => {
+    const events = Array.from({ length: n }, (_, k) =>
+      ev({ id: `${id}.${k}`, start: 1000 - k, category: "person" }),
+    );
+    return n === 1
+      ? { kind: "event", id, sortTime: 1000, start: 1000, end: 1000, event: events[0] }
+      : { kind: "camera", id, camera: "camera.x", sortTime: 1000, start: 1000, end: 1000, events };
+  };
+  const ids = (r: { list: TimelineItem[] }) => r.list.map((i) => i.id);
+
+  it("keeps the newest rows up to the limit and counts the hidden events", () => {
+    const r = capItems([row("a", 1), row("b", 1), row("c", 1), row("d", 1), row("e", 1)], 3);
+    expect(ids(r)).toEqual(["a", "b", "c"]);
+    expect(r.hidden).toBe(2);
+  });
+
+  it("keeps a group across the limit whole", () => {
+    // 2 events, then a group of 3 that crosses 4, then 1 more.
+    const r = capItems([row("a", 2), row("b", 3), row("c", 1)], 4);
+    expect(ids(r)).toEqual(["a", "b"]);
+    expect(r.hidden).toBe(1);
+  });
+
+  it("reaches as far as a kept row", () => {
+    const list = [row("a", 1), row("b", 1), row("c", 1), row("d", 1)];
+    const r = capItems(list, 2, (i) => i.id === "c");
+    expect(ids(r)).toEqual(["a", "b", "c"]);
+    expect(r.hidden).toBe(1);
+  });
+
+  it("hides nothing under the limit", () => {
+    const list = [row("a", 1), row("b", 2)];
+    expect(capItems(list, 3)).toEqual({ list, hidden: 0 });
+  });
+
+  it("applies after the filters, so a filter shows older matches", () => {
+    // Three newer people and four older door changes (far enough apart to stay separate rows),
+    // a limit of 3 and the door filter. Capping first would leave no door rows at all.
+    const timeline = groupTimeline(
+      [
+        door(1000, "Open"),
+        door(2000, "Closed"),
+        door(3000, "Open"),
+        door(4000, "Closed"),
+        cam(5000, "camera.entrance"),
+        cam(6000, "camera.garage"),
+        cam(7000, "camera.yard"),
+      ],
+      { window: 120 },
+    );
+    const r = visibleRows(timeline, { categories: new Set(["door"]) }, 3);
+    expect(r.list.map((i) => i.sortTime)).toEqual([4000, 3000, 2000]);
+    expect(r.hidden).toBe(1);
+    const all = visibleRows(timeline, { categories: new Set() }, 3);
+    expect(all.list.map((i) => i.sortTime)).toEqual([7000, 6000, 5000]);
+    expect(all.hidden).toBe(4);
+  });
+
+  it("shows one row with a limit of 1", () => {
+    const r = capItems([row("a", 1), row("b", 1)], 1);
+    expect(ids(r)).toEqual(["a"]);
+    expect(r.hidden).toBe(1);
+  });
+
+  it("shows a first group larger than the limit whole", () => {
+    const r = capItems([row("a", 5), row("b", 1)], 2);
+    expect(ids(r)).toEqual(["a"]);
+    expect(r.hidden).toBe(1);
+  });
+
+  it("changes nothing for a kept row inside the limit", () => {
+    const r = capItems([row("a", 1), row("b", 1), row("c", 1)], 2, (i) => i.id === "a");
+    expect(ids(r)).toEqual(["a", "b"]);
+    expect(r.hidden).toBe(1);
+  });
+
+  it("reaches a kept group past the limit and counts what's after it", () => {
+    const r = capItems(
+      [row("a", 1), row("b", 1), row("c", 3), row("d", 2)],
+      1,
+      (i) => i.id === "c",
+    );
+    expect(ids(r)).toEqual(["a", "b", "c"]);
+    expect(r.hidden).toBe(2);
+  });
+
+  it("caps a plain list by entry count, for the events of an open group", () => {
+    const r = capList(
+      ["e5", "e4", "e3", "e2", "e1"],
+      2,
+      () => 1,
+      (e) => e === "e3",
+    );
+    expect(r).toEqual({ list: ["e5", "e4", "e3"], hidden: 2 });
   });
 });
 

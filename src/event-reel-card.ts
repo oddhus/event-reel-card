@@ -10,7 +10,7 @@ import { detectCapabilities, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
 import { CATEGORY_COLORS, iconFor } from "./core/categories";
 import { findEvent, parseReelParam } from "./core/deeplink";
-import { applyFilters, cameraOptions, itemEvents, summarize } from "./core/filters";
+import { cameraOptions, capList, itemEvents, summarize, visibleRows } from "./core/filters";
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
 import type { BurstSegment, TimelineItem } from "./core/grouping";
@@ -181,6 +181,11 @@ export class EventReelCard extends LitElement {
   private _stickyObserver?: ResizeObserver;
   /** A burst member opened by a deep link, highlighted inside the expanded burst. */
   private _linkedEvent?: string;
+  /**
+   * The last row opened or linked to. The list reaches it past `max_events`, so it doesn't
+   * vanish when it closes or newer events push it down; a day switch clears it.
+   */
+  private _reach?: string;
 
   constructor() {
     super();
@@ -525,6 +530,7 @@ export class EventReelCard extends LitElement {
     this._highlight = undefined;
     this._stripCursor = undefined;
     this._linkedEvent = undefined;
+    this._reach = undefined;
     this._lastEarlier = undefined;
     this._hadItems = false;
     this._lastEarlierToken++; // drop a lookup made for the previous view
@@ -570,8 +576,7 @@ export class EventReelCard extends LitElement {
           e.reviewed === false && this._reviewed.has(e.id) ? { ...e, reviewed: true } : e,
         )
         .filter((e) => (e.end ?? e.start) >= start && e.start < end)
-        .sort((a, b) => b.start - a.start)
-        .slice(0, cfg.maxEvents),
+        .sort((a, b) => b.start - a.start),
     );
     const items = groupTimeline(visible, { window: cfg.groupingWindow });
     this._keepOpen(visible, items);
@@ -672,6 +677,7 @@ export class EventReelCard extends LitElement {
     this._notice = undefined;
     this._clearLinkFromUrl();
     this._filter = { categories: new Set() };
+    this._reach = target.id;
     const container = this._items.find((i) => i.kind !== "event" && i.events.includes(target));
     if (container?.kind === "burst") {
       // Bursts have no detail; expand the burst and point at the step.
@@ -799,8 +805,16 @@ export class EventReelCard extends LitElement {
     target?.focus();
   }
 
+  /** Whether `e` is the open row or the last one reached, also after a merge renamed it. */
+  private _isReached(e: ReelEvent) {
+    return [this._openId, this._reach].some(
+      (id) => !!id && (e.id === id || !!e.aliases?.includes(id)),
+    );
+  }
+
   private _toggle(id: string) {
     this._openId = this._openId === id ? undefined : id;
+    if (this._openId) this._reach = id;
   }
 
   private _toggleGroup(id: string) {
@@ -1100,19 +1114,33 @@ export class EventReelCard extends LitElement {
         meta,
         groupId: item.id,
       })}
-      ${
-        open
-          ? html`<div class="children">
-              ${repeat(
-                // Keyed, so an open clip keeps playing when a newer event joins the group.
-                [...item.events].reverse(),
-                (e) => e.id,
-                (e) => html`<div class="child">${this._eventRow(e)}</div>`,
-              )}
-            </div>`
-          : nothing
-      }
+      ${open ? this._groupChildren(item.events) : nothing}
     </div>`;
+  }
+
+  /** An open camera group's events, newest first, capped like the list. */
+  private _groupChildren(events: ReelEvent[]) {
+    const children = capList(
+      [...events].reverse(),
+      this._config!.maxEvents,
+      () => 1,
+      (e) => this._isReached(e),
+    );
+    return html`<div class="children">
+      ${repeat(
+        // Keyed, so an open clip keeps playing when a newer event joins the group.
+        children.list,
+        (e) => e.id,
+        (e) => html`<div class="child">${this._eventRow(e)}</div>`,
+      )}
+      ${children.hidden ? this._cappedNote(children.hidden) : nothing}
+    </div>`;
+  }
+
+  private _cappedNote(hidden: number) {
+    return html`<p class="capped" role="note">
+      ${this._localize("list.capped", { count: hidden, max: this._config!.maxEvents })}
+    </p>`;
   }
 
   private _renderList(items: TimelineItem[]) {
@@ -1329,7 +1357,10 @@ export class EventReelCard extends LitElement {
   protected override render() {
     if (!this._config) return nothing;
     const t = this._localize;
-    const filtered = applyFilters(this._items, this._filter);
+    const shown = visibleRows(this._items, this._filter, this._config.maxEvents, (item) =>
+      itemEvents(item).some((e) => this._isReached(e)),
+    );
+    const filtered = shown.list;
     const hasItems = this._loaded && this._items.length > 0;
     return html`
       <ha-card .header=${this._config.title || undefined}>
@@ -1360,12 +1391,13 @@ export class EventReelCard extends LitElement {
             ? html`<div class="empty" role="status">${t("loading")}</div>`
             : filtered.length
               ? html`<div
-                  class="list ${this._config.density}"
-                  role="list"
-                  @keydown=${(ev: KeyboardEvent) => this._onKeyDown(ev)}
-                >
-                  ${this._renderList(filtered)}
-                </div>`
+                    class="list ${this._config.density}"
+                    role="list"
+                    @keydown=${(ev: KeyboardEvent) => this._onKeyDown(ev)}
+                  >
+                    ${this._renderList(filtered)}
+                  </div>
+                  ${shown.hidden ? this._cappedNote(shown.hidden) : nothing}`
               : this._items.length
                 ? html`<div class="empty">
                     <button

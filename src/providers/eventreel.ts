@@ -120,7 +120,8 @@ export function createEventReelProvider(): Provider {
           type: "event_reel/events/list",
           start_time: isoOf(range.start),
           end_time: isoOf(range.end),
-          limit: Math.min(MAX_LIMIT, Math.max(100, Math.round(ctx.config.maxEvents))),
+          // More than max_events: the cap applies after the card's filters (§5.1).
+          limit: Math.min(MAX_LIMIT, Math.max(500, Math.round(ctx.config.maxEvents * 2))),
         });
       } catch (err) {
         // Skipped quietly unless the user asked for Event Reel.

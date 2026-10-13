@@ -21,6 +21,15 @@ describe("normalizeConfig", () => {
     expect(normalizeConfig({ type: "x", day_navigation: false }).dayNavigation).toBe(false);
   });
 
+  it("reads max_events as a whole number of at least 1", () => {
+    const max = (max_events: unknown) =>
+      normalizeConfig({ type: "x", max_events: max_events as number }).maxEvents;
+    expect(max(undefined)).toBe(200);
+    expect(max(150.5)).toBe(151);
+    expect(max("40")).toBe(40);
+    expect(max(0)).toBe(200);
+  });
+
   it("treats true/object as explicit and false as disabled", () => {
     const c = normalizeConfig({
       type: "custom:event-reel-card",

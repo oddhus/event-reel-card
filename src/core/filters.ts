@@ -96,6 +96,56 @@ export function cameraOptions(
   return [...options.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export interface Capped<T> {
+  list: T[];
+  /** Events in the entries left out. */
+  hidden: number;
+}
+
+/**
+ * The first entries (newest first) holding at most `max` events, where `size` counts the
+ * events of an entry. An entry across the limit is kept whole, and the list reaches as far
+ * as the last entry `keep` matches (an open or linked row).
+ */
+export function capList<T>(
+  list: T[],
+  max: number,
+  size: (entry: T) => number,
+  keep?: (entry: T) => boolean,
+): Capped<T> {
+  let cut = list.length;
+  let count = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (count >= max) {
+      cut = i;
+      break;
+    }
+    count += size(list[i]);
+  }
+  if (keep) {
+    for (let i = list.length - 1; i >= cut; i--) {
+      if (keep(list[i])) {
+        cut = i + 1;
+        break;
+      }
+    }
+  }
+  if (cut === list.length) return { list, hidden: 0 };
+  return {
+    list: list.slice(0, cut),
+    hidden: list.slice(cut).reduce((n, entry) => n + size(entry), 0),
+  };
+}
+
+/** Timeline items up to `max` events; a group counts all its events. */
+export function capItems(
+  items: TimelineItem[],
+  max: number,
+  keep?: (item: TimelineItem) => boolean,
+): Capped<TimelineItem> {
+  return capList(items, max, (item) => itemEvents(item).length, keep);
+}
+
 export function applyFilters(items: TimelineItem[], state: FilterState): TimelineItem[] {
   if (!state.categories.size && !state.camera) return items;
   return items.filter((item) => {
@@ -106,4 +156,17 @@ export function applyFilters(items: TimelineItem[], state: FilterState): Timelin
     if (state.camera && !itemCameras(item).has(state.camera)) return false;
     return true;
   });
+}
+
+/**
+ * The rows the list shows: filtered first, then capped at `max` events, so a filter finds
+ * older matches among the fetched events (`max_events`, §5.1).
+ */
+export function visibleRows(
+  items: TimelineItem[],
+  state: FilterState,
+  max: number,
+  keep?: (item: TimelineItem) => boolean,
+): Capped<TimelineItem> {
+  return capItems(applyFilters(items, state), max, keep);
 }

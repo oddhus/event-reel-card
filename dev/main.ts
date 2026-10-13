@@ -222,6 +222,7 @@ card.setConfig({
     "person.alex",
   ],
   ...(withLlmVision ? { llmvision: { non_camera: false } } : {}),
+  ...(params.get("max") ? { max_events: Number(params.get("max")) } : {}),
 });
 stage.appendChild(card);
 
