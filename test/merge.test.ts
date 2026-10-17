@@ -155,6 +155,74 @@ describe("mergeEvents", () => {
     const out = mergeEvents([door, unmapped], opts(5000));
     expect(out).toEqual([door, unmapped]);
   });
+
+  it("keeps the review's threat and concerns when AI text merges into it", () => {
+    const r = {
+      ...review("camera.entrance", 1000, 1050),
+      threat: 2 as const,
+      concerns: ["Checked the door"],
+    };
+    const t = ai("camera.entrance", 1000, "Seen");
+    const out = mergeEvents([r, t], opts(5000));
+    expect(out).toHaveLength(1);
+    expect(out[0].threat).toBe(2);
+    expect(out[0].concerns).toEqual(["Checked the door"]);
+  });
+
+  it("keeps Frigate's summary as extra text when a flagged review gets an AI description", () => {
+    const flagged = {
+      ...review("camera.entrance", 1000, 1050),
+      title: "Person tries the door handle",
+      description: "A person pulls the handle twice and leaves.",
+      threat: 1 as const,
+    };
+    const out = mergeEvents(
+      [flagged, ai("camera.entrance", 1010, "Person at the door")],
+      opts(5000),
+    );
+    expect(out[0].title).toBe("Person at the door");
+    expect(out[0].extra).toEqual([
+      {
+        start: 1000,
+        title: "Person tries the door handle",
+        description: "A person pulls the handle twice and leaves.",
+      },
+    ]);
+  });
+
+  it("shows a flagged review's summary once when the AI text has no description", () => {
+    const flagged = {
+      ...review("camera.entrance", 1000, 1050),
+      description: "A person pulls the handle twice and leaves.",
+      threat: 2 as const,
+    };
+    const bare = { ...ai("camera.entrance", 1010, "Person at the door"), description: undefined };
+    const out = mergeEvents([flagged, bare], opts(5000));
+    expect(out[0].description).toBe("A person pulls the handle twice and leaves.");
+    expect(out[0].extra).toBeUndefined();
+  });
+
+  it("adds no extra text for a review without a threat level", () => {
+    const normal = { ...review("camera.entrance", 1000, 1050), description: "A person walks by." };
+    const out = mergeEvents(
+      [normal, ai("camera.entrance", 1010, "Person at the door")],
+      opts(5000),
+    );
+    expect(out[0].extra).toBeUndefined();
+  });
+
+  it("never hides a flagged review as unconfirmed", () => {
+    const t = ai("camera.entrance", 1000, "Seen");
+    const confirmed = review("camera.entrance", 1000, 1050, "c");
+    const flagged = { ...review("camera.entrance", 2000, 2050, "flagged"), threat: 2 as const };
+    const plain = review("camera.entrance", 3000, 3050, "plain");
+    const ids = mergeEvents(
+      [confirmed, t, flagged, plain],
+      opts(5000, { hideUnconfirmed: true }),
+    ).map((e) => e.id);
+    expect(ids).toContain(flagged.id);
+    expect(ids).not.toContain(plain.id);
+  });
 });
 
 describe("mergeEvents review fixes", () => {

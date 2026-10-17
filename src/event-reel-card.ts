@@ -18,6 +18,7 @@ import { Loader } from "./core/loader";
 import { MediaResolver } from "./core/media";
 import { AI_PROVIDERS, mergeEvents } from "./core/merge";
 import { nearestItem, stripModel, timeAt } from "./core/strip";
+import { highestThreat, withFlagged } from "./core/threat";
 import {
   browserTimeZone,
   computeRange,
@@ -905,11 +906,17 @@ export class EventReelCard extends LitElement {
 
   private _eventRow(
     e: ReelEvent,
-    opts: { time?: number; badge?: string; meta?: string[]; groupId?: string } = {},
+    opts: { time?: number; badge?: string; meta?: string[]; groupId?: string; threat?: 1 | 2 } = {},
   ) {
     const t = this._localize;
     const open = !opts.groupId && this._openId === e.id;
     const icon = iconFor(e);
+    const threat = opts.threat ?? e.threat;
+    // Before the title on wide rows, at the start of the camera/duration line on narrow ones
+    // (CSS), so the title stays readable.
+    const threatBadge = threat
+      ? html`<span class="badge threat-${threat}">${t(`threat.${threat}`)}</span>`
+      : nothing;
     const meta = (opts.meta ?? this._metaParts(e)).join(" · ");
     const comfortable = this._config?.density === "comfortable";
     const onClick = opts.groupId
@@ -928,14 +935,14 @@ export class EventReelCard extends LitElement {
         ${this._media(e, icon)}
         <span class="main">
           <span class="title"
-            >${opts.badge ? html`<span class="badge">${opts.badge}</span>` : nothing}${e.title}${
+            >${opts.badge ? html`<span class="badge">${opts.badge}</span>` : nothing}${threatBadge}${e.title}${
               e.stateLabel
                 ? html`<span class="state">${e.title ? " · " : ""}${e.stateLabel}</span>`
                 : nothing
             }</span
           >
           ${comfortable && e.description ? html`<span class="desc">${e.description}</span>` : nothing}
-          ${meta ? html`<span class="sub">${meta}</span>` : nothing}
+          ${meta || threat ? html`<span class="sub">${threatBadge}${meta}</span>` : nothing}
         </span>
         <span class="meta">${meta}</span>
         ${
@@ -1001,6 +1008,14 @@ export class EventReelCard extends LitElement {
                       }
                     </p>`,
                 )}
+              </div>`
+            : nothing
+        }
+        ${
+          e.concerns?.length
+            ? html`<div class="chips concerns">
+                <span class="label">${t("detail.concerns")}:</span>
+                ${e.concerns.map((c) => html`<span class="chip">${c}</span>`)}
               </div>`
             : nothing
         }
@@ -1111,6 +1126,7 @@ export class EventReelCard extends LitElement {
       ${this._eventRow(newest, {
         time: item.sortTime,
         badge: t("group.count", { count: item.events.length }),
+        threat: highestThreat(item.events),
         meta,
         groupId: item.id,
       })}
@@ -1118,13 +1134,20 @@ export class EventReelCard extends LitElement {
     </div>`;
   }
 
-  /** An open camera group's events, newest first, capped like the list. */
+  /**
+   * An open camera group's events, newest first, capped like the list. The cap never hides
+   * an event with a threat level, since the group row shows the highest one.
+   */
   private _groupChildren(events: ReelEvent[]) {
-    const children = capList(
-      [...events].reverse(),
-      this._config!.maxEvents,
-      () => 1,
-      (e) => this._isReached(e),
+    const newestFirst = [...events].reverse();
+    const children = withFlagged(
+      newestFirst,
+      capList(
+        newestFirst,
+        this._config!.maxEvents,
+        () => 1,
+        (e) => this._isReached(e),
+      ),
     );
     return html`<div class="children">
       ${repeat(

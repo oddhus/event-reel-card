@@ -2,7 +2,7 @@
 // populated last 24 hours. No real homes, names or footage.
 
 import type { LogbookEntry } from "../../src/providers/entity";
-import type { FrigateReview } from "../../src/providers/frigate";
+import type { FrigateReview, FrigateReviewMetadata } from "../../src/providers/frigate";
 import type { EventReelRecord } from "../../src/providers/eventreel";
 import type { LlmVisionEvent } from "../../src/providers/llmvision";
 
@@ -33,6 +33,7 @@ export function exampleData(now: number): ExampleData {
     dur: number,
     objects = ["person"],
     suffix = "abc",
+    metadata: FrigateReviewMetadata | null = null,
   ) => {
     const id = rid(start, suffix);
     reviews.push({
@@ -43,7 +44,7 @@ export function exampleData(now: number): ExampleData {
       severity: "alert",
       has_been_reviewed: false,
       thumb_path: `/media/frigate/clips/review/thumb-${camera}-${id}.webp`,
-      data: { objects, sub_labels: [], zones: [], metadata: null },
+      data: { objects, sub_labels: [], zones: [], metadata },
     });
     return start;
   };
@@ -104,7 +105,10 @@ export function exampleData(now: number): ExampleData {
   };
 
   // Morning: someone leaves.
-  let t = review("entrance", h(14.2), 48);
+  let t = review("entrance", h(14.2), 48, ["person"], "abc", {
+    title: "Person leaves with a backpack",
+    shortSummary: "One person walks down the steps carrying a backpack.",
+  });
   ai(
     "image.entrance_person",
     t + 2,
@@ -132,9 +136,18 @@ export function exampleData(now: number): ExampleData {
     "ex-3",
   );
 
-  // Garage activity without AI.
-  review("garage", h(8.1), 95, ["person"], "g1");
-  review("garage", h(7.95), 40, ["car"], "g2");
+  // Garage activity with Frigate GenAI summaries only (threat levels 2 and 1).
+  review("garage", h(8.1), 95, ["person"], "g1", {
+    title: "Person tries the car door handles",
+    shortSummary: "A person walks between the cars trying the door handles.",
+    potential_threat_level: 2,
+    other_concerns: ["Checked several car doors"],
+  });
+  review("garage", h(7.95), 40, ["car"], "g2", {
+    title: "Unfamiliar car waits in the driveway",
+    shortSummary: "A car stops in the driveway with its engine running, then drives off.",
+    potential_threat_level: 1,
+  });
 
   // Lock bounce, then the door.
   const b = h(6);

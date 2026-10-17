@@ -64,7 +64,9 @@ integration beyond core is optional:
 | Nest | The Nest integration (core) | Doorbell clips for Event Reel and LLM Vision doorbell events |
 
 Frigate 0.17 and newer can also write AI summaries of its own reviews (`review.genai` in
-the Frigate config). The card shows them on the Frigate rows without anything else.
+the Frigate config). The card shows them on the Frigate rows without anything else. When
+Frigate rates a review as threat level 1 or 2, the row shows a "Suspicious" or "Security
+concern" badge, and the detail lists the concerns the model saw.
 
 For AI descriptions you need one of these, not all. Event Reel is the companion
 integration: it describes Nest doorbell clips, which a snapshot can't, and cameras outside

@@ -202,6 +202,19 @@ export const styles = css`
     font-weight: 500;
     background: var(--secondary-background-color, rgba(127, 127, 127, 0.15));
   }
+  /* The theme's text colour is mixed in so the label stays readable in light and dark themes. */
+  .badge.threat-1 {
+    color: color-mix(
+      in srgb,
+      var(--warning-color, #ffa600) 35%,
+      var(--primary-text-color, #212121)
+    );
+    background: color-mix(in srgb, var(--warning-color, #ffa600) 18%, transparent);
+  }
+  .badge.threat-2 {
+    color: color-mix(in srgb, var(--error-color, #db4437) 50%, var(--primary-text-color, #212121));
+    background: color-mix(in srgb, var(--error-color, #db4437) 18%, transparent);
+  }
   .desc {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -234,6 +247,10 @@ export const styles = css`
     background: var(--primary-color);
   }
 
+  .sub .badge {
+    font-size: 1em;
+  }
+
   @container (max-width: 480px) {
     .row {
       gap: 8px;
@@ -245,6 +262,11 @@ export const styles = css`
     }
     .sub {
       display: block;
+    }
+    /* The threat badge moves to the camera/duration line, so the title stays readable. */
+    .title .badge.threat-1,
+    .title .badge.threat-2 {
+      display: none;
     }
   }
 
@@ -294,9 +316,13 @@ export const styles = css`
     margin-top: 8px;
     font-size: 0.85em;
   }
-  .extra .label {
+  .extra .label,
+  .concerns .label {
     color: var(--secondary-text-color);
     font-size: 0.85em;
+  }
+  .concerns {
+    align-items: center;
   }
   .extra p {
     margin: 4px 0;
