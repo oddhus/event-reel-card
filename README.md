@@ -16,7 +16,7 @@ A Home Assistant dashboard card that shows **one compact timeline of the day's e
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=oddhus&repository=event-reel-card&category=plugin)
 
 <p>
-  <img src="docs/screenshot.png" alt="The timeline with filter chips, the day strip, camera previews and grouped door events" width="420">
+  <img src="docs/demo.gif" alt="The card in use: the People filter chip narrows the timeline, dragging along the day strip highlights the nearest events, a lock bounce opens to show each step, and an AI event opens with its picture and description" width="420">
 </p>
 
 > **Status:** early release. Versions follow [Semantic Versioning](https://semver.org/);
