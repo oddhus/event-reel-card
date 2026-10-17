@@ -827,6 +827,12 @@ to the clip.
   failed with a decode error (`RemoteMediaManager is not available`), and hls.js raised a
   fatal media error, which is what the card's codec fallback reacts to. Headless Firefox
   has no remote decoder process, so HEVC in a normal Firefox window is still open.
+  *Firefox 158 on Windows 11 (2026-10-17, a normal window driven over WebDriver BiDi, the
+  card in the dev harness with real recordings through the dev proxy, not HA):* the 4K HEVC
+  `hev1` clip played in the card's player at 3840×2160 with no error and no fallback (666
+  frames in 27 s, about 24 fps, first frame within 5 s). The H.264 2880×1616 clip played
+  too (859 frames in 29 s). That machine has Microsoft's HEVC Video Extensions installed;
+  Firefox without them, Firefox on macOS and Linux, and iOS are still open.
 - S2. `frigate/reviews/subscribe` payload shape and behaviour after a reconnect. *From
   source:* the payload is the raw MQTT JSON string; the subscription registers in
   `connection.subscriptions`, so HA's generic unsubscribe works. The card only refetches on
