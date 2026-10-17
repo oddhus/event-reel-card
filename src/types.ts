@@ -73,6 +73,10 @@ export interface ReelEvent {
   frigate?: FrigateRef;
   labels?: string[];
   people?: string[];
+  /** Frigate GenAI threat level: 1 "Needs review", 2 "Security concern" (0 shows nothing). */
+  threat?: 1 | 2;
+  /** Frigate GenAI "other concerns" the model observed; omitted when empty. */
+  concerns?: string[];
   severity?: "alert" | "detection" | "info" | "warning";
   reviewed?: boolean;
   /** Who or what caused it, when cheaply known. */

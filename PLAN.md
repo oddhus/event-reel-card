@@ -134,7 +134,13 @@ Review item shape (sample, ids replaced):
 `end_time` is `null` while the activity is ongoing. `data.metadata` holds Frigate GenAI
 review summaries (`title`, `scene`, `shortSummary`, `confidence`,
 `potential_threat_level`, `other_concerns`; Frigate 0.18 also writes `observations` and
-`time`) when `review.genai` is enabled in Frigate. Use them when present. The card keeps
+`time`) when `review.genai` is enabled in Frigate. `potential_threat_level` is 0 (normal),
+1 (suspicious) or 2 (critical threat) in 0.18, which forces it to 0 when the review
+contains a verified (named) object; Frigate's UI calls 1 "Needs review" and 2 "Security
+concern". In 0.17 the field allowed 0–3 (1 minor anomaly, 2 moderate concern, 3 high
+threat). The card shows "Suspicious" for 1 and "Security concern" for 2 and up (checked in
+the v0.17.0, v0.17.2 and v0.18.x source, 2026-10-17). `other_concerns` are the user's
+configured additional concerns the model observed. Use them when present. The card keeps
 only the fields it reads and skips a record without an `id`, a `camera` or a numeric
 `start_time`. An answer that isn't a list still fails the provider.
 
@@ -647,6 +653,9 @@ Later:
   when the row is expanded.
 - The right side shows the camera name, duration, a face/person chip, the actor when
   known, and a blue dot when unreviewed.
+- A Frigate GenAI threat level of 1 or more shows as a badge ("Suspicious", "Security
+  concern") before the title, or at the start of the camera/duration line on narrow
+  layouts so the title stays readable. A camera group row shows its highest level.
 - Context highlight (P2): a left border colored by the active context band.
 
 **Comfortable:** about 72 px, a 112×63 preview, and a two-line description.
@@ -692,8 +701,9 @@ a compact view.
     override skips HLS entirely.
   - Clip deleted (retention) → "The recording has been deleted".
   - Destroy the hls.js instance when the detail closes or the card disconnects.
-- Full title and description, plus any `extra` AI texts. Meta: camera, duration,
-  objects, faces, sources ("AI + Frigate"), and the GenAI threat level when present.
+- Full title and description, plus any `extra` AI texts (with Frigate's own summary when
+  the review has a threat level and another AI description joined it). Meta: camera,
+  duration, objects, faces, sources ("AI + Frigate"), and the GenAI concerns when present.
 - Actions: **Mark reviewed** (Frigate, P1), **Download** (signed MP4 link with
   `download`, P1), **Open camera** or **Open entity** (more-info), prev/next event.
 - Accessibility: the row's disclosure button is separate from the action buttons. Never
@@ -754,7 +764,7 @@ to the clip.
 |---|---|
 | P0 (M1) | Entity provider, LLM Vision provider, Frigate reviews provider, many-to-one merge, doorbell clips by Nest token, compact rows, grouping (bursts, bounces, camera groups), animated previews with fallback chain, HLS player with codec fallback, rolling 24 h range, nb/en |
 | P1 | Mark reviewed (+ mark all), download, filter chips and summary, day strip, deep links, GUI editor and stub config, HACS release |
-| P2 | ~~Day navigation~~ (done), context bands, calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, GenAI threat badge and `scene` fallback, search, presence at event time, "Summarize the day" (off by default) |
+| P2 | ~~Day navigation~~ (done), context bands, calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search, presence at event time, "Summarize the day" (off by default) |
 | P3 | Multi-camera sync, public provider API (`window.eventReel.registerProvider`), Reolink media-source provider, weekly heatmap |
 
 ---

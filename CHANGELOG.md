@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Frigate GenAI threat levels show as a badge on the row: "Suspicious" for level 1 and
+  "Security concern" for level 2 (and level 3 from Frigate 0.17). A camera group shows the
+  highest level among its events and always lists the flagged events when opened. The
+  detail lists the concerns the model saw, and keeps Frigate's summary when an LLM Vision
+  or Event Reel description joins the review. `hide_unconfirmed` never hides a flagged
+  review.
+
 ## [0.3.1] - 2026-10-14
 
 ### Fixed

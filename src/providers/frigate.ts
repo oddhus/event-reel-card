@@ -7,6 +7,16 @@ import { frigateMedia } from "../core/media";
 import { objectLabel } from "../i18n";
 import type { Localize, Provider, ProviderContext, ReelEvent, TimeRange } from "../types";
 
+export interface FrigateReviewMetadata {
+  title?: string;
+  shortSummary?: string;
+  scene?: string;
+  /** Frigate GenAI threat level: 0 normal, 1 suspicious, 2 critical (0.17 also wrote 3). */
+  potential_threat_level?: number;
+  /** The user's configured "additional concerns" the model observed. */
+  other_concerns?: string[] | null;
+}
+
 export interface FrigateReview {
   id: string;
   camera: string;
@@ -19,7 +29,7 @@ export interface FrigateReview {
     objects?: string[];
     sub_labels?: (string | [string, number])[];
     zones?: string[];
-    metadata?: { title?: string; shortSummary?: string; scene?: string } | null;
+    metadata?: FrigateReviewMetadata | null;
   };
 }
 
@@ -50,6 +60,11 @@ const isObject = (v: unknown): v is Fields => !!v && typeof v === "object" && !A
 const text = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 const texts = (v: unknown) =>
   Array.isArray(v) ? v.filter((s): s is string => typeof s === "string" && !!s) : undefined;
+/** The threat level only when it is an integer 0–3 (Frigate 0.17 allowed 3); else dropped. */
+const threatLevel = (v: unknown): number | undefined =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 3 ? v : undefined;
+/** Frigate's `other_concerns`: null stays null, arrays keep only non-empty strings. */
+const concerns = (v: unknown): string[] | null | undefined => (v === null ? null : texts(v));
 
 /** One review with the fields the card reads, or undefined when it lacks an id, camera or start. */
 function toReview(r: unknown): FrigateReview | undefined {
@@ -83,6 +98,8 @@ function toReview(r: unknown): FrigateReview | undefined {
             title: text(meta.title),
             shortSummary: text(meta.shortSummary),
             scene: text(meta.scene),
+            potential_threat_level: threatLevel(meta.potential_threat_level),
+            other_concerns: concerns(meta.other_concerns),
           }
         : null,
     },
@@ -124,6 +141,10 @@ export function reviewToEvent(
     .filter((s): s is string => typeof s === "string" && s.length > 0);
   const primary = labels.find((l) => categoryFromLabel(l)) ?? labels[0];
   const meta = review.data?.metadata ?? undefined;
+  // 0.18 uses 0–2. 0.17 used 1 minor, 2 moderate, 3 high, so 2 and up is a concern.
+  const level = meta?.potential_threat_level ?? 0;
+  const threat = level >= 2 ? 2 : level === 1 ? 1 : undefined;
+  const concerns = meta?.other_concerns?.length ? meta.other_concerns : undefined;
 
   const title =
     meta?.title ||
@@ -151,6 +172,8 @@ export function reviewToEvent(
     frigate: ref,
     labels,
     people: people.length ? people : undefined,
+    threat,
+    concerns,
     severity: review.severity === "alert" ? "alert" : "detection",
     reviewed: !!review.has_been_reviewed,
     raw: review,

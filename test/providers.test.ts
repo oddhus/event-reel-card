@@ -852,6 +852,98 @@ describe("Frigate reviews", () => {
     expect(e.end).toBeUndefined();
     expect(e.category).toBe("vehicle");
   });
+
+  it("keeps only integer threat levels 0–3 and non-empty concerns", () => {
+    const parsed = parseReviews([
+      {
+        id: "a",
+        camera: "c",
+        start_time: 1,
+        data: {
+          metadata: { potential_threat_level: 2, other_concerns: ["x", "", 3, "y"] },
+        },
+      },
+      {
+        id: "b",
+        camera: "c",
+        start_time: 2,
+        data: { metadata: { potential_threat_level: 0, other_concerns: null } },
+      },
+      { id: "s", camera: "c", start_time: 3, data: { metadata: { potential_threat_level: "1" } } },
+      { id: "f", camera: "c", start_time: 4, data: { metadata: { potential_threat_level: 1.5 } } },
+      { id: "t", camera: "c", start_time: 5, data: { metadata: { potential_threat_level: true } } },
+      { id: "n", camera: "c", start_time: 6, data: { metadata: { potential_threat_level: -1 } } },
+      { id: "old", camera: "c", start_time: 7, data: { metadata: { potential_threat_level: 3 } } },
+      { id: "big", camera: "c", start_time: 8, data: { metadata: { potential_threat_level: 4 } } },
+    ]);
+    expect(parsed.map((r) => [r.id, r.data?.metadata?.potential_threat_level])).toEqual([
+      ["a", 2],
+      ["b", 0],
+      ["s", undefined],
+      ["f", undefined],
+      ["t", undefined],
+      ["n", undefined],
+      ["old", 3],
+      ["big", undefined],
+    ]);
+    expect(parsed[0].data?.metadata?.other_concerns).toEqual(["x", "y"]);
+    expect(parsed[1].data?.metadata?.other_concerns).toBeNull();
+  });
+
+  it("sets threat for levels 1 and 2 (not 0 or missing) and the concerns", () => {
+    const ctx = { cameras, localize: getLocalize("en") };
+    const base = { ...review, data: { objects: ["person"], metadata: null } };
+    const level2 = reviewToEvent(
+      {
+        ...base,
+        data: {
+          objects: ["person"],
+          metadata: { potential_threat_level: 2, other_concerns: ["Checked the door"] },
+        },
+      },
+      "frigate",
+      ctx,
+    );
+    expect(level2.threat).toBe(2);
+    expect(level2.concerns).toEqual(["Checked the door"]);
+
+    const level1 = reviewToEvent(
+      { ...base, data: { objects: ["person"], metadata: { potential_threat_level: 1 } } },
+      "frigate",
+      ctx,
+    );
+    expect(level1.threat).toBe(1);
+    expect(level1.concerns).toBeUndefined();
+
+    const normal = reviewToEvent(
+      { ...base, data: { objects: ["person"], metadata: { potential_threat_level: 0 } } },
+      "frigate",
+      ctx,
+    );
+    expect(normal.threat).toBeUndefined();
+
+    expect(reviewToEvent(base, "frigate", ctx).threat).toBeUndefined();
+  });
+
+  it("shows Frigate 0.17's level 3 as a security concern", () => {
+    const ctx = { cameras, localize: getLocalize("en") };
+    const e = reviewToEvent(
+      { ...review, data: { objects: ["person"], metadata: { potential_threat_level: 3 } } },
+      "frigate",
+      ctx,
+    );
+    expect(e.threat).toBe(2);
+  });
+
+  it("leaves concerns out when Frigate sends none that are usable", () => {
+    const ctx = { cameras, localize: getLocalize("en") };
+    for (const other_concerns of [[], ["", 5], null]) {
+      const [parsed] = parseReviews([
+        { id: "x", camera: "c", start_time: 1, data: { metadata: { other_concerns } } },
+      ]);
+      expect(reviewToEvent(parsed, "frigate", ctx).concerns).toBeUndefined();
+    }
+  });
 });
 
 describe("Frigate fetch", () => {

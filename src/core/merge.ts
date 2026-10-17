@@ -27,6 +27,11 @@ function mergeGroup(media: ReelEvent, texts: ReelEvent[]): ReelEvent {
   const [first, ...rest] = texts;
   // A text may already carry extra descriptions (the same clip described twice).
   const extra = [
+    // A threat level comes with Frigate's own summary, which explains it: keep that text
+    // when the AI text replaces it (without a description, the row falls back to it).
+    ...(media.threat && media.description && first.description
+      ? [{ start: media.start, title: media.title, description: media.description }]
+      : []),
     ...(first.extra ?? []),
     ...rest.flatMap((t) => [
       { start: t.start, title: t.title, description: t.description },
@@ -136,8 +141,10 @@ export function mergeEvents(events: ReelEvent[], opts: MergeOptions): ReelEvent[
       continue;
     }
     if (!opts.showUnmatched) continue;
+    // A review Frigate's GenAI flagged is never hidden as unconfirmed.
     if (
       opts.hideUnconfirmed &&
+      !m.threat &&
       !!m.camera &&
       aiCameras.has(m.camera) &&
       (m.end ?? opts.now) < opts.now - grace
