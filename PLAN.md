@@ -785,7 +785,9 @@ to the clip.
      `/api/frigate/{iid}/vod/...` → `${FRIGATE_URL}/vod/...`,
      `/api/frigate/{iid}/notifications/{id}/review_preview.gif` → `${FRIGATE_URL}/api/review/{id}/preview`,
      `/api/frigate/{iid}/clips/...` → `${FRIGATE_URL}/clips/...`, and so on. This does
-     not exercise HA auth or signing.
+     not exercise HA auth or signing. The proxy only forwards requests from a page opened
+     with `?live=1` (by the Referer) and answers 404 otherwise: the example data's camera
+     names can match a real Frigate's, and example screenshots must never show its footage.
    - Fixtures: commit only anonymized `*.example.json`. Real snapshots go in
      `*.local.json` (gitignored).
 3. `npm test`: Vitest unit tests (merge, grouping, cameras, provider parsers, time).
