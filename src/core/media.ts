@@ -85,16 +85,6 @@ export const needsSigning = (path: string) =>
 const SIGN_EXPIRES = 3600;
 const RESOLVE_CACHE = 3000;
 const HLS_CACHE = 300;
-/** Give up on HA's answer after this long, so a dropped connection can't leave media loading. */
-export const ANSWER_TIMEOUT_MS = 15_000;
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("no answer from Home Assistant")), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
 
 /**
  * Turns MediaRefs into playable URLs: signs HA paths (auth/sign_path) and resolves
@@ -121,8 +111,7 @@ export class MediaResolver {
     const pending = this.inflight.get(key);
     if (pending) return pending;
 
-    // A late answer after the timeout is dropped: the race has settled, so it isn't cached.
-    const promise: Promise<string> = withTimeout(this.fetchUrl(ref), ANSWER_TIMEOUT_MS)
+    const promise = this.fetchUrl(ref)
       .then((url) => {
         // Segments of an HLS stream reuse the manifest's signature for the whole playback, so
         // hand out manifest signatures with most of their validity left.
@@ -134,9 +123,7 @@ export class MediaResolver {
         this.cache.set(key, { url, expires: this.now() + ttl });
         return url;
       })
-      .finally(() => {
-        if (this.inflight.get(key) === promise) this.inflight.delete(key);
-      });
+      .finally(() => this.inflight.delete(key));
     this.inflight.set(key, promise);
     return promise;
   }
