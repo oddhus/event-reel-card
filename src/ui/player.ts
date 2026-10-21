@@ -24,6 +24,17 @@ const WIDEN_STEP = 30;
 const TICK = 2000;
 
 let hlsModule: Promise<typeof HlsType> | undefined;
+/** Seconds buffered from the current position on. */
+function bufferedAhead(video: HTMLVideoElement): number {
+  const { buffered, currentTime } = video;
+  for (let i = 0; i < buffered.length; i++) {
+    if (buffered.start(i) <= currentTime + 0.5 && buffered.end(i) > currentTime) {
+      return buffered.end(i) - currentTime;
+    }
+  }
+  return 0;
+}
+
 const loadHls = () => (hlsModule ??= import("hls.js/light").then((m) => m.default));
 
 /** What identifies "the same clip": a new object for the same event must not restart playback. */
@@ -162,6 +173,10 @@ export class EventReelPlayer extends LitElement {
     void this.prepareDownload(e, token);
     void this.preparePending(e, token);
 
+    if (e.camera && codecBlocked.has(e.camera)) {
+      await this.fallback(token, "codec");
+      return;
+    }
     if (e.clip) {
       await this.playFile(e.clip, token);
       return;
@@ -170,7 +185,7 @@ export class EventReelPlayer extends LitElement {
       await this.fallback(token, "unavailable");
       return;
     }
-    if (this.clipMode === "preview" || (e.camera && codecBlocked.has(e.camera))) {
+    if (this.clipMode === "preview") {
       await this.fallback(token, "codec");
       return;
     }
@@ -230,7 +245,7 @@ export class EventReelPlayer extends LitElement {
       return;
     }
     this.armWatchdog(video, token, native);
-    this.play(video);
+    this.play(video, token);
   }
 
   private blockCodec() {
@@ -239,13 +254,19 @@ export class EventReelPlayer extends LitElement {
 
   private lastActivity = 0;
   private startedAt = 0;
-  private playRefused = false;
 
-  private play(video: HTMLVideoElement) {
+  private play(video: HTMLVideoElement, token: number) {
     video.play().catch((err: unknown) => {
-      if ((err as { name?: string } | undefined)?.name === "NotAllowedError")
-        this.playRefused = true;
+      // Autoplay refused (Low Power Mode, say): the clip is fine, it only needs a tap.
+      if ((err as { name?: string } | undefined)?.name === "NotAllowedError") this.handOver(token);
     });
+  }
+
+  /** Stops waiting for playback to start and leaves the video and its controls to the user. */
+  private handOver(token: number) {
+    if (!this.alive(token) || this._status !== "loading") return;
+    window.clearInterval(this.startTimer);
+    this._status = "playing";
   }
 
   private touch() {
@@ -258,7 +279,6 @@ export class EventReelPlayer extends LitElement {
    */
   private armWatchdog(video: HTMLVideoElement, token: number, native: boolean) {
     this.startedAt = performance.now() / 1000;
-    this.playRefused = false;
     this.touch();
     this.listeners?.abort();
     this.listeners = new AbortController();
@@ -267,6 +287,8 @@ export class EventReelPlayer extends LitElement {
     for (const type of ["progress", "loadedmetadata", "loadeddata", "canplay"]) {
       video.addEventListener(type, activity, { signal });
     }
+    // Paused through the controls before the first frame: the user is in charge now.
+    video.addEventListener("pause", () => this.handOver(token), { signal });
 
     const camera = this.event?.camera;
     this.startTimer = window.setInterval(() => {
@@ -286,7 +308,7 @@ export class EventReelPlayer extends LitElement {
         idle: now - this.lastActivity,
         elapsed: now - this.startedAt,
         readyState: video.readyState,
-        playRefused: this.playRefused,
+        bufferedAhead: bufferedAhead(video),
         stalledBefore: !!camera && stalledOnce.has(camera),
       });
       if (verdict === "wait") return;
@@ -313,6 +335,7 @@ export class EventReelPlayer extends LitElement {
       () => {
         if (!this.alive(token)) return;
         this._status = "playing";
+        if (camera) stalledOnce.delete(camera);
         window.clearInterval(this.startTimer);
         window.clearTimeout(this.watchdog);
         this.watchdog = window.setTimeout(() => {
@@ -340,7 +363,7 @@ export class EventReelPlayer extends LitElement {
       if (!video || !this.alive(token)) return;
       video.src = url;
       this.armWatchdog(video, token, true);
-      this.play(video);
+      this.play(video, token);
     } catch {
       await this.fallback(token, "unavailable");
     }
@@ -415,7 +438,7 @@ export class EventReelPlayer extends LitElement {
   private message(): string | undefined {
     switch (this._status) {
       case "codec":
-        return this.t("player.codec");
+        return this.t(this.event?.clip ? "player.codec_clip" : "player.codec");
       case "deleted":
         return this.t("player.deleted");
       case "unavailable":
@@ -456,7 +479,7 @@ export class EventReelPlayer extends LitElement {
     const canWiden = !!this.event.frigate && !fallback;
     const msg = this.message();
     return html`
-      <div class="stage" tabindex="-1">
+      <div class="stage" tabindex="-1" role="group" aria-label=${this.event.title}>
         ${
           fallback
             ? this.renderFallback()
@@ -541,7 +564,6 @@ export class EventReelPlayer extends LitElement {
       background: #000;
       border-radius: 8px;
       overflow: hidden;
-      outline: none;
     }
     video,
     .empty,
@@ -551,6 +573,10 @@ export class EventReelPlayer extends LitElement {
       width: 100%;
       height: 100%;
       object-fit: contain;
+    }
+    .stage:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
     }
     .pending {
       pointer-events: none;

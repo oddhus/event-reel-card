@@ -8,7 +8,7 @@ const HAVE_CURRENT_DATA = 2;
 const HAVE_FUTURE_DATA = 3;
 const HAVE_ENOUGH_DATA = 4;
 
-const base = { native: true, playRefused: false, stalledBefore: false };
+const base = { native: true, bufferedAhead: 0, stalledBefore: false };
 
 describe("stallVerdict", () => {
   it("keeps waiting while data arrives and the start limit hasn't passed", () => {
@@ -49,17 +49,11 @@ describe("stallVerdict", () => {
     expect(stallVerdict({ ...again, readyState: HAVE_NOTHING })).toBe("unavailable");
   });
 
-  it("doesn't blame the decoder when the browser refused to start playback", () => {
-    expect(
-      stallVerdict({
-        ...base,
-        playRefused: true,
-        stalledBefore: true,
-        idle: 1,
-        elapsed: 46,
-        readyState: HAVE_ENOUGH_DATA,
-      }),
-    ).toBe("unavailable");
+  it("blames the decoder when seconds of media are buffered and still don't play", () => {
+    // Safari can stay at HAVE_METADATA when it can't decode the frames it downloaded.
+    const stuck = { ...base, idle: 13, elapsed: 20, readyState: HAVE_METADATA };
+    expect(stallVerdict({ ...stuck, bufferedAhead: 8 })).toBe("codec");
+    expect(stallVerdict({ ...stuck, bufferedAhead: 1 })).toBe("unavailable");
   });
 
   it("never blames the decoder for hls.js, which reports decode errors itself", () => {
