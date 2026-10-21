@@ -75,6 +75,7 @@ export const en = {
     "Full quality uses H.265, which this device can't play. Showing the preview instead.",
   "player.deleted": "The recording has been deleted.",
   "player.unavailable": "The recording isn't available.",
+  "player.retry": "Try again",
   "player.preview_only": "Preview",
   "strip.label": "Day overview: use the arrow keys to move between events",
   "filter.label": "Filter events",

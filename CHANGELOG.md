@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- A clip that stalls on a slow network no longer counts as a recording the device can't
+  play. Before, on Safari and iOS (and for Nest clips), one stall kept that camera on the
+  preview with the H.265 message until the page was reloaded. Now the card shows "The
+  recording isn't available" with a **Try again** button, and the next clip tries full
+  quality again.
+- The player no longer stays on "Loading clip…" forever when Home Assistant doesn't answer
+  a request to sign or resolve a clip; it gives up after 15 seconds and shows the preview.
+
 ## [0.4.0] - 2026-10-17
 
 ### Added

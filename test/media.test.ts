@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MediaResolver, frigateMedia, keyFrameRef } from "../src/core/media";
 import type { HomeAssistant } from "../src/ha-types";
 
@@ -83,5 +83,54 @@ describe("MediaResolver", () => {
     await resolver.url(ref);
     expect(callWS).toHaveBeenCalledTimes(2);
     expect(callWS.mock.calls[0][0]).toMatchObject({ path: "/api/y?format=mp4" });
+  });
+});
+
+describe("MediaResolver when Home Assistant doesn't answer", () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** A callWS whose answers the test releases by hand. */
+  function setup() {
+    vi.useFakeTimers();
+    const answers: ((value: { path: string }) => void)[] = [];
+    const callWS = vi.fn(() => new Promise<{ path: string }>((resolve) => answers.push(resolve)));
+    const hass = { callWS } as unknown as HomeAssistant;
+    const resolver = new MediaResolver(
+      () => hass,
+      () => 1000,
+    );
+    return { resolver, callWS, answers };
+  }
+  const ref = { kind: "hls" as const, path: "/api/frigate/frigate/vod/entrance/index.m3u8" };
+
+  it("fails every waiting caller after 15 s instead of hanging", async () => {
+    const { resolver } = setup();
+    const a = resolver.url(ref);
+    const b = resolver.url(ref);
+    const settled = Promise.allSettled([a, b]);
+    await vi.advanceTimersByTimeAsync(14_900);
+    let done = false;
+    void settled.then(() => (done = true));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(200);
+    const results = await settled;
+    expect(results.map((r) => r.status)).toEqual(["rejected", "rejected"]);
+  });
+
+  it("asks again after a timeout and ignores the late answer", async () => {
+    const { resolver, callWS, answers } = setup();
+    const first = resolver.url(ref).catch(() => "failed");
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await first).toBe("failed");
+
+    answers[0]({ path: "/late?authSig=old" });
+    const second = resolver.url(ref);
+    expect(callWS).toHaveBeenCalledTimes(2);
+    answers[1]({ path: "/fresh?authSig=new" });
+    expect(await second).toBe("/fresh?authSig=new");
+    // The fresh answer is the one cached.
+    expect(await resolver.url(ref)).toBe("/fresh?authSig=new");
+    expect(callWS).toHaveBeenCalledTimes(2);
   });
 });

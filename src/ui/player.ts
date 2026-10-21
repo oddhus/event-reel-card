@@ -7,6 +7,7 @@ import type { PropertyValues } from "lit";
 import type HlsType from "hls.js/light";
 import { frigateMedia } from "../core/media";
 import type { MediaResolver } from "../core/media";
+import { stallVerdict } from "../core/playback";
 import type { Localize, MediaRef, ReelEvent } from "../types";
 import { motionAllowed } from "./preview";
 
@@ -18,11 +19,6 @@ const codecBlocked = new Set<string>();
 
 const WATCHDOG_MS = 4000;
 const WIDEN_STEP = 30;
-/** Give up when nothing has loaded for this long (a 4K segment can take a while). */
-const IDLE_LIMIT_HLS = 25;
-const IDLE_LIMIT_NATIVE = 12;
-/** Give up when playback hasn't started after this long, even if data keeps arriving. */
-const START_LIMIT = 45;
 const TICK = 2000;
 
 let hlsModule: Promise<typeof HlsType> | undefined;
@@ -261,7 +257,6 @@ export class EventReelPlayer extends LitElement {
       video.addEventListener(type, activity, { signal });
     }
 
-    const idleLimit = native ? IDLE_LIMIT_NATIVE : IDLE_LIMIT_HLS;
     this.startTimer = window.setInterval(() => {
       if (!this.alive(token) || this._status !== "loading") {
         window.clearInterval(this.startTimer);
@@ -274,10 +269,15 @@ export class EventReelPlayer extends LitElement {
         this.lastActivity = now;
         return;
       }
-      if (now - this.lastActivity > idleLimit || now - this.startedAt > START_LIMIT) {
-        if (native) this.blockCodec();
-        void this.fallback(token, native ? "codec" : "unavailable");
-      }
+      const verdict = stallVerdict({
+        native,
+        idle: now - this.lastActivity,
+        elapsed: now - this.startedAt,
+        readyState: video.readyState,
+      });
+      if (verdict === "wait") return;
+      if (verdict === "codec") this.blockCodec();
+      void this.fallback(token, verdict);
     }, TICK);
 
     video.addEventListener(
@@ -382,6 +382,11 @@ export class EventReelPlayer extends LitElement {
     }
   }
 
+  private retry() {
+    this.authRetried = false;
+    void this.start();
+  }
+
   private widen(which: 0 | 1) {
     const next: [number, number] = [...this._extra];
     next[which] += WIDEN_STEP;
@@ -483,6 +488,11 @@ export class EventReelPlayer extends LitElement {
                 <button aria-label=${this.t("detail.later_label")} @click=${() => this.widen(1)}>
                   ${this.t("detail.later")}
                 </button>`
+            : nothing
+        }
+        ${
+          this._status === "unavailable"
+            ? html`<button @click=${this.retry}>${this.t("player.retry")}</button>`
             : nothing
         }
         <span class="spacer"></span>

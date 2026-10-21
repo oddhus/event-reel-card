@@ -77,6 +77,7 @@ export const nb: Strings = {
     "Full kvalitet bruker H.265, som denne enheten ikke kan spille av. Viser forhåndsvisningen i stedet.",
   "player.deleted": "Opptaket er slettet.",
   "player.unavailable": "Opptaket er ikke tilgjengelig.",
+  "player.retry": "Prøv igjen",
   "player.preview_only": "Forhåndsvisning",
   "strip.label": "Døgnoversikt: bruk piltastene for å gå mellom hendelser",
   "filter.label": "Filtrer hendelser",
