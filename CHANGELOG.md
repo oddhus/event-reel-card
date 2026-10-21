@@ -17,6 +17,8 @@ All notable changes to this project are documented here. The project uses
   leaves the clip ready to play with a tap instead of giving up on it.
 - A Nest clip that fails to load (Home Assistant answers 404 when the clip is gone) now
   shows "The recording isn't available" with **Try again**, instead of the H.265 message.
+- The player no longer stays on "Loading clip…" forever when Home Assistant doesn't answer
+  a request to sign or resolve a clip; it gives up after 15 seconds and shows the preview.
 
 ## [0.4.0] - 2026-10-17
 
