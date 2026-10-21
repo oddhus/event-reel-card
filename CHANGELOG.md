@@ -3,6 +3,13 @@
 All notable changes to this project are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- The player no longer stays on "Loading clip…" forever when Home Assistant doesn't answer
+  a request to sign or resolve a clip; it gives up after 15 seconds and shows the preview.
+
 ## [0.4.0] - 2026-10-17
 
 ### Added
