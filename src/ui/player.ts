@@ -7,6 +7,7 @@ import type { PropertyValues } from "lit";
 import type HlsType from "hls.js/light";
 import { frigateMedia } from "../core/media";
 import type { MediaResolver } from "../core/media";
+import { countsAsStall, stallVerdict } from "../core/playback";
 import type { Localize, MediaRef, ReelEvent } from "../types";
 import { motionAllowed } from "./preview";
 
@@ -15,17 +16,25 @@ type FallbackStatus = Exclude<Status, "loading" | "playing">;
 
 /** Cameras whose recordings failed to decode in this session: open them straight in fallback. */
 const codecBlocked = new Set<string>();
+/** Cameras that stalled once after their metadata loaded: a second stall blocks the codec. */
+const stalledOnce = new Set<string>();
 
 const WATCHDOG_MS = 4000;
 const WIDEN_STEP = 30;
-/** Give up when nothing has loaded for this long (a 4K segment can take a while). */
-const IDLE_LIMIT_HLS = 25;
-const IDLE_LIMIT_NATIVE = 12;
-/** Give up when playback hasn't started after this long, even if data keeps arriving. */
-const START_LIMIT = 45;
 const TICK = 2000;
 
 let hlsModule: Promise<typeof HlsType> | undefined;
+/** Seconds buffered from the current position on. */
+function bufferedAhead(video: HTMLVideoElement): number {
+  const { buffered, currentTime } = video;
+  for (let i = 0; i < buffered.length; i++) {
+    if (buffered.start(i) <= currentTime + 0.5 && buffered.end(i) > currentTime) {
+      return buffered.end(i) - currentTime;
+    }
+  }
+  return 0;
+}
+
 const loadHls = () => (hlsModule ??= import("hls.js/light").then((m) => m.default));
 
 /** What identifies "the same clip": a new object for the same event must not restart playback. */
@@ -231,8 +240,8 @@ export class EventReelPlayer extends LitElement {
       await this.fallback(token, "codec");
       return;
     }
-    this.armWatchdog(video, token, native);
-    video.play().catch(() => undefined);
+    this.armWatchdog(video, token, native, false);
+    this.play(video, token);
   }
 
   private blockCodec() {
@@ -242,15 +251,36 @@ export class EventReelPlayer extends LitElement {
   private lastActivity = 0;
   private startedAt = 0;
 
+  private play(video: HTMLVideoElement, token: number) {
+    video.play().catch((err: unknown) => {
+      // Autoplay refused (Low Power Mode, say): the clip is fine, it only needs a tap.
+      if ((err as { name?: string } | undefined)?.name === "NotAllowedError") this.handOver(token);
+    });
+  }
+
+  /** Stops waiting for playback to start and leaves the video and its controls to the user. */
+  private handOver(token: number) {
+    if (!this.alive(token) || this._status !== "loading") return;
+    window.clearInterval(this.startTimer);
+    this._status = "playing";
+  }
+
   private touch() {
     this.lastActivity = performance.now() / 1000;
   }
 
   /**
    * Falls back when playback never starts (stalled, or a codec the device silently can't
-   * play), on decode errors, and in the "audio but black video" case.
+   * play), on decode errors, and in the "audio but black video" case. A clip (a Nest MP4)
+   * is H.264 that every browser plays, so its failures are never the codec: a missing clip
+   * answers 404, which the video element reports as an unsupported format.
    */
-  private armWatchdog(video: HTMLVideoElement, token: number, native: boolean) {
+  private armWatchdog(video: HTMLVideoElement, token: number, native: boolean, clip: boolean) {
+    const fail = (status: FallbackStatus) => {
+      if (clip && status === "codec") status = "unavailable";
+      if (status === "codec") this.blockCodec();
+      void this.fallback(token, status);
+    };
     this.startedAt = performance.now() / 1000;
     this.touch();
     this.listeners?.abort();
@@ -260,8 +290,10 @@ export class EventReelPlayer extends LitElement {
     for (const type of ["progress", "loadedmetadata", "loadeddata", "canplay"]) {
       video.addEventListener(type, activity, { signal });
     }
+    // Paused through the controls before the first frame: the user is in charge now.
+    video.addEventListener("pause", () => this.handOver(token), { signal });
 
-    const idleLimit = native ? IDLE_LIMIT_NATIVE : IDLE_LIMIT_HLS;
+    const camera = this.event?.camera;
     this.startTimer = window.setInterval(() => {
       if (!this.alive(token) || this._status !== "loading") {
         window.clearInterval(this.startTimer);
@@ -274,10 +306,18 @@ export class EventReelPlayer extends LitElement {
         this.lastActivity = now;
         return;
       }
-      if (now - this.lastActivity > idleLimit || now - this.startedAt > START_LIMIT) {
-        if (native) this.blockCodec();
-        void this.fallback(token, native ? "codec" : "unavailable");
-      }
+      const verdict = stallVerdict({
+        native,
+        idle: now - this.lastActivity,
+        elapsed: now - this.startedAt,
+        readyState: video.readyState,
+        bufferedAhead: bufferedAhead(video),
+        stalledBefore: !!camera && stalledOnce.has(camera),
+      });
+      if (verdict === "wait") return;
+      if (verdict === "unavailable" && !clip && camera && countsAsStall(native, video.readyState))
+        stalledOnce.add(camera);
+      fail(verdict);
     }, TICK);
 
     video.addEventListener(
@@ -287,8 +327,7 @@ export class EventReelPlayer extends LitElement {
         const code = video.error?.code;
         const codec =
           code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || code === MediaError.MEDIA_ERR_DECODE;
-        if (codec) this.blockCodec();
-        void this.fallback(token, codec ? "codec" : "unavailable");
+        fail(codec ? "codec" : "unavailable");
       },
       { once: true, signal },
     );
@@ -298,6 +337,7 @@ export class EventReelPlayer extends LitElement {
       () => {
         if (!this.alive(token)) return;
         this._status = "playing";
+        if (camera) stalledOnce.delete(camera);
         window.clearInterval(this.startTimer);
         window.clearTimeout(this.watchdog);
         this.watchdog = window.setTimeout(() => {
@@ -306,10 +346,7 @@ export class EventReelPlayer extends LitElement {
             video.getVideoPlaybackQuality?.().totalVideoFrames ??
             (video as HTMLVideoElement & { webkitDecodedFrameCount?: number })
               .webkitDecodedFrameCount;
-          if (frames === 0 && video.currentTime > 1) {
-            this.blockCodec();
-            void this.fallback(token, "codec");
-          }
+          if (frames === 0 && video.currentTime > 1) fail("codec");
         }, WATCHDOG_MS);
       },
       { once: true, signal },
@@ -324,8 +361,8 @@ export class EventReelPlayer extends LitElement {
       const video = this.video;
       if (!video || !this.alive(token)) return;
       video.src = url;
-      this.armWatchdog(video, token, true);
-      video.play().catch(() => undefined);
+      this.armWatchdog(video, token, true, true);
+      this.play(video, token);
     } catch {
       await this.fallback(token, "unavailable");
     }
@@ -382,6 +419,15 @@ export class EventReelPlayer extends LitElement {
     }
   }
 
+  private retry() {
+    this.authRetried = false;
+    void this.start();
+    // The button goes away while the clip loads: keep keyboard focus in the player.
+    void this.updateComplete.then(() =>
+      this.renderRoot.querySelector<HTMLElement>(".stage")?.focus(),
+    );
+  }
+
   private widen(which: 0 | 1) {
     const next: [number, number] = [...this._extra];
     next[which] += WIDEN_STEP;
@@ -432,7 +478,7 @@ export class EventReelPlayer extends LitElement {
     const canWiden = !!this.event.frigate && !fallback;
     const msg = this.message();
     return html`
-      <div class="stage">
+      <div class="stage" tabindex="-1" role="group" aria-label=${this.event.title}>
         ${
           fallback
             ? this.renderFallback()
@@ -485,6 +531,11 @@ export class EventReelPlayer extends LitElement {
                 </button>`
             : nothing
         }
+        ${
+          this._status === "unavailable" && (this.event.clip || this.event.frigate)
+            ? html`<button @click=${this.retry}>${this.t("player.retry")}</button>`
+            : nothing
+        }
         <span class="spacer"></span>
         ${
           this._downloadUrl
@@ -521,6 +572,10 @@ export class EventReelPlayer extends LitElement {
       width: 100%;
       height: 100%;
       object-fit: contain;
+    }
+    .stage:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
     }
     .pending {
       pointer-events: none;

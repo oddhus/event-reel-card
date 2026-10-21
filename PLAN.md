@@ -700,8 +700,24 @@ a compact view.
     - no video frames are decoded 4 s after playback starts
       (`getVideoPlaybackQuality().totalVideoFrames === 0`), the black-video-with-audio
       case.
-    Remember the result per camera for the session. The per-camera `clip: preview`
-    override skips HLS entirely.
+    - a native player (Safari's HLS, a plain MP4) times out with media buffered ahead
+      (`readyState >= HAVE_FUTURE_DATA`, or 3 s or more in `buffered`; Safari can stay at
+      HAVE_METADATA when it can't decode what it downloaded),
+    - or a native player times out after its metadata loaded on a camera whose previous
+      clip stalled the same way, with no clip of it playing in between.
+    Remember the result per camera for the session. The per-camera
+    `clip: preview` override skips HLS entirely.
+  - **Stalls are not codec failures** (`core/playback.ts`, 2026-10-21). When nothing loads
+    for the idle limit (25 s hls.js, 12 s native) or playback hasn't started after 45 s,
+    and none of the codec rules above apply, show the preview with "The recording isn't
+    available" and a "Try again" button (only for events with a clip or Frigate
+    recording): a single network stall must not keep a camera on previews for the
+    session. When the browser refuses autoplay (Low Power Mode) or the user pauses before
+    the first frame, stop the start watchdog and leave the video with its controls.
+  - **Clips are never a codec failure.** A Nest clip is H.264 MP4, which every browser
+    plays. A missing clip answers 404 (JSON), which the video element reports as
+    `MEDIA_ERR_SRC_NOT_SUPPORTED`, so every clip failure is "unavailable" with Try again,
+    and nothing is blocked (verified on the reference install, 2026-10-21).
   - Clip deleted (retention) → "The recording has been deleted".
   - Destroy the hls.js instance when the detail closes or the card disconnects.
 - Full title and description, plus any `extra` AI texts (with Frigate's own summary when
