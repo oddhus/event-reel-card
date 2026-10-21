@@ -481,6 +481,9 @@ Goal: one row per real-world moment, with the AI title and description plus the 
 - Sign the **full path including the query** (for example `?format=mp4`).
 - Media-source ids go through `media_source/resolve_media`, which returns its own signed
   URL.
+- Give up on HA's answer after 15 s (2026-10-21): every caller waiting on that request
+  gets the error, the next call asks again, and a late answer is not cached. Without it, a
+  request lost on a dropped connection left the player on "Loading clip…" for good.
 
 ### 3.7 Live updates
 
