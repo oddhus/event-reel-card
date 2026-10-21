@@ -7,8 +7,9 @@ export const IDLE_LIMIT_NATIVE = 12;
 /** Give up when playback hasn't started after this long, even if data keeps arriving. */
 export const START_LIMIT = 45;
 
-/** `HTMLMediaElement.HAVE_CURRENT_DATA`: media for the current position is buffered. */
-const HAVE_CURRENT_DATA = 2;
+// `HTMLMediaElement.readyState` values.
+const HAVE_METADATA = 1;
+const HAVE_FUTURE_DATA = 3;
 
 export type StallVerdict = "wait" | "unavailable" | "codec";
 
@@ -21,15 +22,27 @@ export interface StallState {
   elapsed: number;
   /** The video element's `readyState`. */
   readyState: number;
+  /** The browser refused `play()` (Low Power Mode, say): not the decoder's fault. */
+  playRefused: boolean;
+  /** This camera already stalled once this session after its metadata loaded. */
+  stalledBefore: boolean;
 }
 
 /**
- * A native player that has the media buffered and still doesn't play can't decode it, and
- * says nothing (hls.js reports that as a media error instead). Anything else that times out
- * is a stall: fall back, but let the next attempt try the full clip again.
+ * A native player that can't decode a recording says nothing (hls.js reports a media error
+ * instead). It shows as a stall that buffered ahead and still didn't play, or as a stall
+ * after the metadata loaded that happens again on the same camera. Any other timeout is a
+ * stall: fall back, but let the next attempt try the full clip again.
  */
 export function stallVerdict(s: StallState): StallVerdict {
   const idleLimit = s.native ? IDLE_LIMIT_NATIVE : IDLE_LIMIT_HLS;
   if (s.idle <= idleLimit && s.elapsed <= START_LIMIT) return "wait";
-  return s.native && s.readyState >= HAVE_CURRENT_DATA ? "codec" : "unavailable";
+  if (!s.native || s.playRefused) return "unavailable";
+  if (s.readyState >= HAVE_FUTURE_DATA) return "codec";
+  if (s.readyState >= HAVE_METADATA && s.stalledBefore) return "codec";
+  return "unavailable";
 }
+
+/** Whether a stall counts as the first strike toward `stalledBefore`. */
+export const countsAsStall = (native: boolean, readyState: number) =>
+  native && readyState >= HAVE_METADATA;

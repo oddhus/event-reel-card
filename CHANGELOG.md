@@ -11,7 +11,8 @@ All notable changes to this project are documented here. The project uses
   play. Before, on Safari and iOS (and for Nest clips), one stall kept that camera on the
   preview with the H.265 message until the page was reloaded. Now the card shows "The
   recording isn't available" with a **Try again** button, and the next clip tries full
-  quality again.
+  quality again. A camera whose recordings stall the same way twice is still treated as
+  one this device can't play.
 - The player no longer stays on "Loading clip…" forever when Home Assistant doesn't answer
   a request to sign or resolve a clip; it gives up after 15 seconds and shows the preview.
 

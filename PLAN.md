@@ -697,15 +697,17 @@ a compact view.
     - no video frames are decoded 4 s after playback starts
       (`getVideoPlaybackQuality().totalVideoFrames === 0`), the black-video-with-audio
       case.
-    - a native player (Safari's HLS, a plain MP4) has the media buffered
-      (`readyState >= HAVE_CURRENT_DATA`) but hasn't started after the idle or start limit.
+    - a native player (Safari's HLS, a plain MP4) times out after buffering ahead
+      (`readyState >= HAVE_FUTURE_DATA`), or times out after its metadata loaded on a
+      camera that already stalled that way once this session (Safari fails silently on
+      HEVC it can't decode). Not when the browser refused `play()` (Low Power Mode).
     Remember the result per camera for the session. The per-camera `clip: preview`
     override skips HLS entirely.
   - **Stalls are not codec failures** (`core/playback.ts`, 2026-10-21). When nothing loads
-    for the idle limit (25 s hls.js, 12 s native) or playback hasn't started after 45 s
-    without the media buffered, show the preview with "The recording isn't available" and
-    a "Try again" button, and remember nothing: a network stall once must not keep a camera
-    on previews for the session. `MediaResolver` gives up on HA's answer to a signing or
+    for the idle limit (25 s hls.js, 12 s native) or playback hasn't started after 45 s,
+    and none of the codec rules above apply, show the preview with "The recording isn't
+    available" and a "Try again" button (only for events with a clip or Frigate
+    recording): a single network stall must not keep a camera on previews for the session. `MediaResolver` gives up on HA's answer to a signing or
     resolve request after 15 s, so a dropped connection can't leave the player loading.
   - Clip deleted (retention) → "The recording has been deleted".
   - Destroy the hls.js instance when the detail closes or the card disconnects.

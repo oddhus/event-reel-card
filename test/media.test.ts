@@ -124,7 +124,9 @@ describe("MediaResolver when Home Assistant doesn't answer", () => {
     await vi.advanceTimersByTimeAsync(15_000);
     expect(await first).toBe("failed");
 
+    // The first request answers late, after the card gave up on it.
     answers[0]({ path: "/late?authSig=old" });
+    await vi.advanceTimersByTimeAsync(0);
     const second = resolver.url(ref);
     expect(callWS).toHaveBeenCalledTimes(2);
     answers[1]({ path: "/fresh?authSig=new" });
