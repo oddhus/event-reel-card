@@ -173,10 +173,6 @@ export class EventReelPlayer extends LitElement {
     void this.prepareDownload(e, token);
     void this.preparePending(e, token);
 
-    if (e.camera && codecBlocked.has(e.camera)) {
-      await this.fallback(token, "codec");
-      return;
-    }
     if (e.clip) {
       await this.playFile(e.clip, token);
       return;
@@ -185,7 +181,7 @@ export class EventReelPlayer extends LitElement {
       await this.fallback(token, "unavailable");
       return;
     }
-    if (this.clipMode === "preview") {
+    if (this.clipMode === "preview" || (e.camera && codecBlocked.has(e.camera))) {
       await this.fallback(token, "codec");
       return;
     }
@@ -244,7 +240,7 @@ export class EventReelPlayer extends LitElement {
       await this.fallback(token, "codec");
       return;
     }
-    this.armWatchdog(video, token, native);
+    this.armWatchdog(video, token, native, false);
     this.play(video, token);
   }
 
@@ -275,9 +271,16 @@ export class EventReelPlayer extends LitElement {
 
   /**
    * Falls back when playback never starts (stalled, or a codec the device silently can't
-   * play), on decode errors, and in the "audio but black video" case.
+   * play), on decode errors, and in the "audio but black video" case. A clip (a Nest MP4)
+   * is H.264 that every browser plays, so its failures are never the codec: a missing clip
+   * answers 404, which the video element reports as an unsupported format.
    */
-  private armWatchdog(video: HTMLVideoElement, token: number, native: boolean) {
+  private armWatchdog(video: HTMLVideoElement, token: number, native: boolean, clip: boolean) {
+    const fail = (status: FallbackStatus) => {
+      if (clip && status === "codec") status = "unavailable";
+      if (status === "codec") this.blockCodec();
+      void this.fallback(token, status);
+    };
     this.startedAt = performance.now() / 1000;
     this.touch();
     this.listeners?.abort();
@@ -312,9 +315,9 @@ export class EventReelPlayer extends LitElement {
         stalledBefore: !!camera && stalledOnce.has(camera),
       });
       if (verdict === "wait") return;
-      if (verdict === "codec") this.blockCodec();
-      else if (camera && countsAsStall(native, video.readyState)) stalledOnce.add(camera);
-      void this.fallback(token, verdict);
+      if (verdict === "unavailable" && !clip && camera && countsAsStall(native, video.readyState))
+        stalledOnce.add(camera);
+      fail(verdict);
     }, TICK);
 
     video.addEventListener(
@@ -324,8 +327,7 @@ export class EventReelPlayer extends LitElement {
         const code = video.error?.code;
         const codec =
           code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || code === MediaError.MEDIA_ERR_DECODE;
-        if (codec) this.blockCodec();
-        void this.fallback(token, codec ? "codec" : "unavailable");
+        fail(codec ? "codec" : "unavailable");
       },
       { once: true, signal },
     );
@@ -344,10 +346,7 @@ export class EventReelPlayer extends LitElement {
             video.getVideoPlaybackQuality?.().totalVideoFrames ??
             (video as HTMLVideoElement & { webkitDecodedFrameCount?: number })
               .webkitDecodedFrameCount;
-          if (frames === 0 && video.currentTime > 1) {
-            this.blockCodec();
-            void this.fallback(token, "codec");
-          }
+          if (frames === 0 && video.currentTime > 1) fail("codec");
         }, WATCHDOG_MS);
       },
       { once: true, signal },
@@ -362,7 +361,7 @@ export class EventReelPlayer extends LitElement {
       const video = this.video;
       if (!video || !this.alive(token)) return;
       video.src = url;
-      this.armWatchdog(video, token, true);
+      this.armWatchdog(video, token, true, true);
       this.play(video, token);
     } catch {
       await this.fallback(token, "unavailable");
@@ -438,7 +437,7 @@ export class EventReelPlayer extends LitElement {
   private message(): string | undefined {
     switch (this._status) {
       case "codec":
-        return this.t(this.event?.clip ? "player.codec_clip" : "player.codec");
+        return this.t("player.codec");
       case "deleted":
         return this.t("player.deleted");
       case "unavailable":

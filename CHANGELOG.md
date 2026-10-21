@@ -15,7 +15,8 @@ All notable changes to this project are documented here. The project uses
   stall twice in a row, is still treated as one this device can't play.
 - When the browser refuses to autoplay a clip (iOS Low Power Mode, say), the player now
   leaves the clip ready to play with a tap instead of giving up on it.
-- A Nest clip the device can't play gets its own message instead of the H.265 one.
+- A Nest clip that fails to load (Home Assistant answers 404 when the clip is gone) now
+  shows "The recording isn't available" with **Try again**, instead of the H.265 message.
 
 ## [0.4.0] - 2026-10-17
 

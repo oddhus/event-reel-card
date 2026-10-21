@@ -75,8 +75,6 @@ export const nb: Strings = {
   "player.loading": "Laster klipp …",
   "player.codec":
     "Full kvalitet bruker H.265, som denne enheten ikke kan spille av. Viser forhåndsvisningen i stedet.",
-  "player.codec_clip":
-    "Denne enheten kan ikke spille av klippet. Viser forhåndsvisningen i stedet.",
   "player.deleted": "Opptaket er slettet.",
   "player.unavailable": "Opptaket er ikke tilgjengelig.",
   "player.retry": "Prøv igjen",

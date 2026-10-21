@@ -73,7 +73,6 @@ export const en = {
   "player.loading": "Loading clip…",
   "player.codec":
     "Full quality uses H.265, which this device can't play. Showing the preview instead.",
-  "player.codec_clip": "This device can't play the clip. Showing the preview instead.",
   "player.deleted": "The recording has been deleted.",
   "player.unavailable": "The recording isn't available.",
   "player.retry": "Try again",
