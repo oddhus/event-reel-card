@@ -25,6 +25,10 @@ describe("hasSource", () => {
 
   it("is false when the only installed integration is switched off", () => {
     expect(hasSource(card({ frigate: false }), { ...none, frigate: true })).toBe(false);
+    // The editor switches a provider off this way and keeps its options.
+    expect(hasSource(card({ frigate: { enabled: false } }), { ...none, frigate: true })).toBe(
+      false,
+    );
   });
 
   it("is false when a configured integration isn't installed", () => {

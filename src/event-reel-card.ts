@@ -238,7 +238,14 @@ export class EventReelCard extends LitElement {
       return;
     }
     if (!prev) return;
-    if (prev.entities !== hass.entities) this._cameras = undefined;
+    if (prev.entities !== hass.entities || prev.services !== hass.services) {
+      // An integration may show up after the card started (a cold load, HA restarting):
+      // fetch from it now rather than on the next refresh.
+      const before = this._activeTypes();
+      this._buildRegistry();
+      const appeared = this._activeTypes().filter((type) => !before.includes(type));
+      if (appeared.length) this._refresh(appeared);
+    }
 
     const ctx = this._ctx();
     const live = this._entity.live!(prev, hass, ctx);
@@ -395,6 +402,12 @@ export class EventReelCard extends LitElement {
       localize: this._localize,
       now,
     };
+  }
+
+  private _activeTypes(): ProviderType[] {
+    return this._providers
+      .map((p) => p.type as ProviderType)
+      .filter((type) => this._status(type) === "active");
   }
 
   private _status(type: ProviderType) {
