@@ -774,6 +774,12 @@ to the clip.
 - A media fallback is not an error. Log it once to the console.
 - Empty range: "No events in the last 24 hours" (or "today"), plus the time of the last
   earlier event.
+- No source at all (no entities, and no Frigate, Event Reel or LLM Vision that is installed
+  and not switched off; `hasSource()` in `core/capabilities.ts`): "Nothing to show yet",
+  what to add, and a link to the README's configuration section, instead of an empty range
+  that would look like a quiet day (2026-10-22). Nest alone brings no events. When
+  `hass.entities` or `hass.services` changes, the card detects again and fetches from a
+  provider that just appeared, so a slow start never leaves the guidance up.
 
 ---
 

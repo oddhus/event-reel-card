@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- A card with nothing to read from (no entities, and no Frigate, Event Reel or LLM Vision)
+  now says so and how to set it up, with a link to the setup guide, instead of looking
+  like a quiet day.
+
+### Fixed
+
+- An integration that finishes loading after the card (a cold start, or Home Assistant
+  restarting) is picked up at once. Before, its events waited for the next refresh, up to
+  a minute, and on a past day until you navigated.
+
 ## [0.4.1] - 2026-10-21
 
 ### Fixed

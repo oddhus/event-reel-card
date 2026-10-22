@@ -6,6 +6,10 @@ export const nb: Strings = {
   "empty.yesterday": "Ingen hendelser i går",
   "empty.day": "Ingen hendelser denne dagen",
   "empty.last": "Siste hendelse: {when}",
+  "empty.setup": "Ingenting å vise ennå",
+  "empty.setup_hint":
+    "Legg til dører, lås eller personer under Entiteter i kortredigeringen (entities: i YAML), eller installer Frigate, Event Reel eller LLM Vision.",
+  "empty.setup_link": "Slik setter du det opp",
   loading: "Laster …",
   "nav.label": "Dag",
   "nav.previous_day": "Forrige dag",

@@ -438,6 +438,13 @@ export const styles = css`
     margin-top: 4px;
     font-size: 0.85em;
   }
+  .empty a {
+    color: var(--primary-color);
+  }
+  .empty a:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
   .linkish {
     all: unset;
     cursor: pointer;

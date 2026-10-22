@@ -6,7 +6,7 @@ import { normalizeConfig } from "./config";
 import type { CardConfig, NormalizedConfig } from "./config";
 import { buildCameraRegistry } from "./core/cameras";
 import type { CameraRegistry } from "./core/cameras";
-import { detectCapabilities, providerStatus } from "./core/capabilities";
+import { detectCapabilities, hasSource, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
 import { CATEGORY_COLORS, iconFor } from "./core/categories";
 import { findEvent, parseReelParam } from "./core/deeplink";
@@ -76,6 +76,9 @@ const dataKey = (c: NormalizedConfig) =>
     c.refreshInterval,
     c.language,
   ]);
+
+/** The README's configuration section, linked from the empty state when no source is set up. */
+const SETUP_URL = "https://github.com/oddhus/event-reel-card#configuration";
 
 /** Seconds before a provider that hasn't answered is shown as unavailable. */
 const FETCH_TIMEOUT = 20;
@@ -235,7 +238,14 @@ export class EventReelCard extends LitElement {
       return;
     }
     if (!prev) return;
-    if (prev.entities !== hass.entities) this._cameras = undefined;
+    if (prev.entities !== hass.entities || prev.services !== hass.services) {
+      // An integration may show up after the card started (a cold load, HA restarting):
+      // fetch from it now rather than on the next refresh.
+      const before = this._activeTypes();
+      this._buildRegistry();
+      const appeared = this._activeTypes().filter((type) => !before.includes(type));
+      if (appeared.length) this._refresh(appeared);
+    }
 
     const ctx = this._ctx();
     const live = this._entity.live!(prev, hass, ctx);
@@ -392,6 +402,12 @@ export class EventReelCard extends LitElement {
       localize: this._localize,
       now,
     };
+  }
+
+  private _activeTypes(): ProviderType[] {
+    return this._providers
+      .map((p) => p.type as ProviderType)
+      .filter((type) => this._status(type) === "active");
   }
 
   private _status(type: ProviderType) {
@@ -1306,6 +1322,15 @@ export class EventReelCard extends LitElement {
 
   private _empty() {
     const t = this._localize;
+    if (this._caps && !hasSource(this._config!, this._caps)) {
+      return html`<div class="empty" role="status">
+        <div>${t("empty.setup")}</div>
+        <div class="muted">
+          ${t("empty.setup_hint")}
+          <a href=${SETUP_URL} target="_blank" rel="noopener">${t("empty.setup_link")}</a>
+        </div>
+      </div>`;
+    }
     const range = this._config!.range;
     const text = this._day
       ? this._day === shiftDay(dayKey(clock.now(), this._tz()), -1)
