@@ -31,10 +31,10 @@ that way. The rules are the same for changes written by an agent and by hand:
 
 ## Reporting a bug
 
-Open an issue with the card version, your Home Assistant version, the browser or
-Companion app, the relevant card configuration with your own names replaced, what you
-expected and what happened, and any errors from the browser console. Name the Frigate,
-Frigate integration or LLM Vision version when the bug involves them.
+Open an issue with the bug report form. It asks for the card version, your Home Assistant
+version, the browser or Companion app, the relevant card configuration with your own names
+replaced, what you expected and what happened, and any errors from the browser console.
+Name the Frigate, Frigate integration or LLM Vision version when the bug involves them.
 
 ## Setup and workflow
 
