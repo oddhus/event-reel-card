@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in the card doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. This repository is public: replace your own entity ids, names,
+        hostnames and tokens with neutral examples (`camera.entrance`, `person.alex`), and
+        leave out camera footage and screenshots of your home.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: The steps, and whether it happens every time.
+      placeholder: |
+        1. Open the dashboard on …
+        2. Tap a Frigate event …
+  - type: input
+    id: card
+    attributes:
+      label: Card version
+      description: Shown in the browser console as `EVENT-REEL-CARD vX.Y.Z`, or in HACS.
+      placeholder: v0.4.1
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version
+      description: Settings → About.
+      placeholder: "2026.10.2"
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser or Companion app
+      description: Name, version and device, such as "Chrome 152 on Windows" or "Companion app on iOS 26".
+    validations:
+      required: true
+  - type: input
+    id: integrations
+    attributes:
+      label: Integration versions
+      description: >-
+        When the bug involves them: Frigate, the Frigate integration, Event Reel, LLM Vision
+        or Nest.
+      placeholder: Frigate 0.18.2, Frigate integration 5.15.6
+  - type: textarea
+    id: config
+    attributes:
+      label: Card configuration
+      description: The card's YAML, with your own names replaced.
+      render: yaml
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console errors
+      description: Errors that mention the card, from the browser's developer tools (F12 → Console).
+      render: text
