@@ -659,7 +659,8 @@ Later:
 - A Frigate GenAI threat level of 1 or more shows as a badge ("Suspicious", "Security
   concern") before the title, or at the start of the camera/duration line on narrow
   layouts so the title stays readable. A camera group row shows its highest level.
-- Context highlight (P2): a left border colored by the active context band.
+- Context highlight (P2, done): a left edge colored by the context band covering the
+  row's time (§5.6).
 
 **Comfortable:** about 72 px, a 112×63 preview, and a two-line description.
 
@@ -738,11 +739,60 @@ a compact view.
   hover/focus and shows the still otherwise.
 - `prefers-reduced-motion` or `navigator.connection.saveData` → behave like `still`.
 
-### 5.6 Context bands (P2)
+### 5.6 Context bands (P2, done after 0.4.1)
 
 Fetch history for the `context` entities in the visible range. Compute the intervals
 where the state matches. Shade them on the day strip, and color the left border of rows
 inside them. Use cases: "someone came while we were away" and "activity at night".
+
+- **Config:** `context:` takes at most 4 items (the strip can't tell more apart): an entity
+  id (state `on`) or `{entity, state (string or list, default on), label, color}`. YAML
+  only; the editor keeps it. Each entity id must look like `domain.object_id`: Home
+  Assistant refuses the history of all of them when one is malformed. Two bands may watch
+  one entity (an alarm panel's away and night states); bands are keyed by their position.
+  The label defaults to the friendly name. `color` is an HA
+  color name, mapped to `var(--<name>-color, <HA default>)` (the fallback serves themes
+  and the harness without HA's color variables), or any CSS color; defaults indigo, amber,
+  teal, pink in order. HA's other theme names (`primary`, `accent`, `dark-grey`…) map the
+  same way. A value that isn't a valid CSS color (checked with `CSS.supports`, and never
+  with `;`, braces, quotes or angle brackets, since it goes into style attributes) gets the
+  default color for its position instead of none.
+- **Data:** one `history/history_during_period` call per full refresh (not for a single
+  provider's refetch) for all context entities: `include_start_time_state`, minimal
+  response, no attributes, all changes. The first row is the state at the range start, so
+  a band already on starts at the left edge. Time is `lc ?? lu`. A failed call keeps the
+  previous bands and logs to console.debug (bands are decoration, no warning chip). A
+  newer view or refresh drops a late answer (token). Live: a changed state of a context
+  entity in `hass` appends a transition at once; those newer than a later answer are
+  kept (`mergeTransitions`). An entity with no rows at all (unchanged for longer than the
+  recorder keeps) is seeded from its current state when that held over the view. A past
+  day doesn't take live changes. The live range runs on to now between refreshes
+  (`_viewRange`), for the bands, the strip and strip taps, so a band that began after the
+  last refresh has a place on the strip.
+- **Intervals** (`core/context.ts`, pure): `unknown`/`unavailable` keep the previous state
+  (a restart neither splits nor starts a band). Gaps under 5 min are bridged (someone who
+  leaves, comes back for something and leaves again), closed intervals under 1 min
+  inside the range are dropped. In the live range the bands run on to now, and one still
+  on is open: it covers everything after its start, including live rows newer than the
+  last refresh.
+- **Strip:** a full-height fill at 18 % of the color, behind the histogram and ticks, and
+  a 3 px edge in a lane per band (lane = config index) at the top, so overlapping bands
+  stay apart.
+- **Rows:** a row is inside a band when the band covers the start of one of its events
+  (a group or burst that began while away counts; the same rule as the chips' counts and
+  filter). It gets an inset 3 px left edge
+  (box-shadow, no layout shift) in the first covering band's color (config order; a door burst that starts while away and
+  ends after coming home is kept by the chip, so it gets the edge too), and a
+  visually hidden " · <label>" for screen readers.
+- **Chips:** with `filters`, a chip per band in view (swatch, label, row count; also at 0,
+  so a shaded band always has a name) leads the chip bar;
+  a picked chip shows only rows with an event inside it, OR between bands, AND with the
+  other chips. A camera group narrows to the events inside the band (one left becomes a
+  plain row); a burst stays whole when a step is inside. With category chips on, the band
+  and the category must hold for the same event, so a group never shows an event of
+  another category. A picked band that left the config is ignored, and a change to
+  `context` clears the picks. Chips name the bands; without `filters` a small legend under
+  the strip (or the chip bar's place, without the strip) does.
 
 ### 5.7 Deep links (P1)
 
@@ -789,7 +839,7 @@ to the clip.
 |---|---|
 | P0 (M1) | Entity provider, LLM Vision provider, Frigate reviews provider, many-to-one merge, doorbell clips by Nest token, compact rows, grouping (bursts, bounces, camera groups), animated previews with fallback chain, HLS player with codec fallback, rolling 24 h range, nb/en |
 | P1 | Mark reviewed (+ mark all), download, filter chips and summary, day strip, deep links, GUI editor and stub config, HACS release |
-| P2 | ~~Day navigation~~ (done), context bands, calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search, presence at event time, "Summarize the day" (off by default) |
+| P2 | ~~Day navigation~~ (done), ~~context bands~~ (done), calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search across days (a one-day version was built and dropped as too little gain over the chips; revisit when AI descriptions are reliable), presence at event time, "Summarize the day" (off by default) |
 | P3 | Multi-camera sync, public provider API (`window.eventReel.registerProvider`), Reolink media-source provider, weekly heatmap |
 
 ---

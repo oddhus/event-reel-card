@@ -35,6 +35,26 @@ export type NestConfig = ProviderToggle;
 
 export type EventReelConfig = ProviderToggle;
 
+/** A period to highlight, while an entity is in one of the states (§5.6). */
+export interface ContextConfig {
+  entity: string;
+  /** Default "on". */
+  state?: string | string[];
+  label?: string;
+  /** An HA color name (`red`, `indigo`…) or any CSS color. */
+  color?: string;
+}
+
+export interface NormalizedContext {
+  entity: string;
+  states: string[];
+  label?: string;
+  color?: string;
+}
+
+/** The strip can't tell more bands apart. */
+export const MAX_CONTEXT = 4;
+
 export interface CameraOverride {
   clip?: "auto" | "preview";
   name?: string;
@@ -65,6 +85,8 @@ export interface CardConfig {
   day_strip?: boolean;
   /** Buttons for the previous and next day (default true). */
   day_navigation?: boolean;
+  /** Periods shaded on the strip and marked on rows, such as away mode or night. */
+  context?: (string | ContextConfig)[];
 }
 
 export interface NormalizedConfig {
@@ -87,6 +109,7 @@ export interface NormalizedConfig {
   filters: boolean;
   dayStrip: boolean;
   dayNavigation: boolean;
+  context: NormalizedContext[];
 }
 
 function toggle(value: unknown): ProviderToggle {
@@ -127,6 +150,7 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
     else throw new Error("Each item under `entities` needs an entity id");
   }
 
+  const context = normalizeContext(config.context);
   const llm = obj<LlmVisionConfig>(config.llmvision);
   const frig = obj<FrigateConfig>(config.frigate);
   const padding = Array.isArray(frig.clip_padding) ? frig.clip_padding : [];
@@ -162,5 +186,31 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
     filters: config.filters !== false,
     dayStrip: config.day_strip !== false,
     dayNavigation: config.day_navigation !== false,
+    context,
   };
+}
+
+/** Home Assistant's entity id format: `domain.object_id`, lower case. */
+const ENTITY_ID = /^[a-z0-9_]+\.[a-z0-9_]+$/;
+
+function normalizeContext(value: unknown): NormalizedContext[] {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error("`context` must be a list");
+  if (value.length > MAX_CONTEXT) {
+    throw new Error(`\`context\` takes at most ${MAX_CONTEXT} entities`);
+  }
+  return value.map((item: unknown) => {
+    const c = (typeof item === "string" ? { entity: item } : item) as ContextConfig | null;
+    // One malformed id would make Home Assistant refuse the history of every band.
+    if (!c || typeof c !== "object" || typeof c.entity !== "string" || !ENTITY_ID.test(c.entity)) {
+      throw new Error("Each item under `context` needs an entity id, such as `input_boolean.away`");
+    }
+    const states = (Array.isArray(c.state) ? c.state : [c.state ?? "on"]).map(String);
+    return {
+      entity: c.entity,
+      states,
+      label: typeof c.label === "string" ? c.label : undefined,
+      color: typeof c.color === "string" ? c.color : undefined,
+    };
+  });
 }

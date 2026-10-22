@@ -18,6 +18,15 @@ import { Loader } from "./core/loader";
 import { MediaResolver } from "./core/media";
 import { AI_PROVIDERS, mergeEvents } from "./core/merge";
 import { nearestItem, stripModel, timeAt } from "./core/strip";
+import {
+  bandAt,
+  bandCounts,
+  contextBands,
+  historyTransitions,
+  inAnyBand,
+  mergeTransitions,
+} from "./core/context";
+import type { ContextBand, Transition } from "./core/context";
 import { highestThreat, withFlagged } from "./core/threat";
 import {
   browserTimeZone,
@@ -75,6 +84,7 @@ const dataKey = (c: NormalizedConfig) =>
     c.maxEvents,
     c.refreshInterval,
     c.language,
+    c.context,
   ]);
 
 /** The README's configuration section, linked from the empty state when no source is set up. */
@@ -175,6 +185,11 @@ export class EventReelCard extends LitElement {
   private _linkSince = 0;
   private _handledLink?: string;
   private _lastEarlierAt = -Infinity;
+  /** State changes of the context entities in view, oldest first (§5.6). */
+  private _context = new Map<string, Transition[]>();
+  private _contextToken = 0;
+  /** The bands of the last render, for the rows' edges. */
+  private _bands: ContextBand[] = [];
   private _highlightTimer?: number;
   private _lastStripScroll = 0;
   private _lastStripItem?: string;
@@ -209,6 +224,10 @@ export class EventReelCard extends LitElement {
     this._config = next;
     this._updateLanguage();
     if (!next.filters) this._filter = { categories: new Set() };
+    // Band keys are positions in `context`; picked ones mean something else after a change.
+    else if (prev && JSON.stringify(prev.context) !== JSON.stringify(next.context)) {
+      this._filter = { ...this._filter, bands: undefined };
+    }
     const leaveDay = !next.dayNavigation && this._day !== undefined;
     if (leaveDay) this._setDay(undefined);
     if (!this._started) return;
@@ -247,6 +266,7 @@ export class EventReelCard extends LitElement {
       if (appeared.length) this._refresh(appeared);
     }
 
+    this._liveContext(prev, hass);
     const ctx = this._ctx();
     const live = this._entity.live!(prev, hass, ctx);
     if (live.length) {
@@ -449,7 +469,77 @@ export class EventReelCard extends LitElement {
       this._setError(type, status === "missing" && explicit ? "missing" : undefined);
       this._loader.skip(type);
     }
+    if (!only) void this._fetchContext(range, now);
     this._ensureSubscriptions();
+  }
+
+  /**
+   * History of the context entities over the range, with the state at its start, so a band
+   * that was already on starts at the left edge. Bands are decoration: a failure keeps the
+   * previous ones and only logs.
+   */
+  private async _fetchContext(range: TimeRange, now: number) {
+    const hass = this._hass;
+    // Two bands may watch one entity (an alarm panel's away and night states).
+    const entities = [...new Set(this._config?.context.map((c) => c.entity) ?? [])];
+    const token = ++this._contextToken;
+    if (!hass || !entities.length) {
+      this._context = new Map();
+      return;
+    }
+    try {
+      const history = await hass.callWS<Record<string, { s: string; lu: number; lc?: number }[]>>({
+        type: "history/history_during_period",
+        start_time: new Date(range.start * 1000).toISOString(),
+        end_time: new Date(Math.min(range.end, now) * 1000).toISOString(),
+        entity_ids: entities,
+        include_start_time_state: true,
+        minimal_response: true,
+        no_attributes: true,
+        significant_changes_only: false,
+      });
+      if (token !== this._contextToken) return; // superseded by a newer view or refresh
+      const next = new Map<string, Transition[]>();
+      for (const id of entities) {
+        const state = hass.states[id];
+        const current = state
+          ? { state: state.state, at: Date.parse(state.last_changed) / 1000 }
+          : undefined;
+        // Live changes newer than the answer stay until the next fetch has them.
+        next.set(
+          id,
+          mergeTransitions(
+            historyTransitions(history[id] ?? []),
+            this._context.get(id) ?? [],
+            current,
+            range,
+            !!this._day,
+          ),
+        );
+      }
+      this._context = next;
+      this.requestUpdate();
+    } catch (err) {
+      console.debug("[event-reel] context history unavailable", err);
+    }
+  }
+
+  /** A context entity changed: move the band's edge now rather than on the next refresh. */
+  private _liveContext(prev: HomeAssistant, hass: HomeAssistant) {
+    if (this._day || !this._config?.context.length) return;
+    let changed = false;
+    const next = new Map(this._context);
+    for (const { entity } of this._config.context) {
+      const before = prev.states[entity];
+      const after = hass.states[entity];
+      if (!after || before === after || before?.state === after.state) continue;
+      const at = Date.parse(after.last_changed) / 1000;
+      next.set(entity, [...(next.get(entity) ?? []), { state: after.state, at }]);
+      changed = true;
+    }
+    if (!changed) return;
+    this._context = next;
+    this.requestUpdate();
   }
 
   private _onResult(type: string, events: ReelEvent[], range: TimeRange) {
@@ -552,6 +642,8 @@ export class EventReelCard extends LitElement {
     this._hadItems = false;
     this._lastEarlierToken++; // drop a lookup made for the previous view
     this._lastEarlierAt = -Infinity;
+    this._context = new Map();
+    this._contextToken++; // drop a history answer for the previous view
   }
 
   /** Day navigation: switches the day and keeps keyboard focus in the navigation row. */
@@ -761,7 +853,7 @@ export class EventReelCard extends LitElement {
     if (!this._range) return;
     const item =
       (ev.detail.id && items.find((i) => i.id === ev.detail.id)) ||
-      nearestItem(items, timeAt(ev.detail.position, this._range));
+      nearestItem(items, timeAt(ev.detail.position, this._viewRange()!));
     if (!item) return;
     const now = performance.now();
     const recent = now - this._lastStripScroll < 400;
@@ -922,7 +1014,15 @@ export class EventReelCard extends LitElement {
 
   private _eventRow(
     e: ReelEvent,
-    opts: { time?: number; badge?: string; meta?: string[]; groupId?: string; threat?: 1 | 2 } = {},
+    opts: {
+      time?: number;
+      badge?: string;
+      meta?: string[];
+      groupId?: string;
+      threat?: 1 | 2;
+      /** Start times of a group's events, for its band edge. */
+      times?: number[];
+    } = {},
   ) {
     const t = this._localize;
     const open = !opts.groupId && this._openId === e.id;
@@ -939,9 +1039,11 @@ export class EventReelCard extends LitElement {
       ? () => this._toggleGroup(opts.groupId!)
       : () => this._toggle(e.id);
     const expanded = opts.groupId ? this._openGroups.has(opts.groupId) : open;
+    const band = this._bandMark(opts.times ?? [e.start]);
     return html`
       <button
-        class="row ${hasMedia(e) ? "camera" : "plain"} ${this._highlight === e.id && !opts.groupId ? "hl" : ""}"
+        class="row ${hasMedia(e) ? "camera" : "plain"} ${this._highlight === e.id && !opts.groupId ? "hl" : ""} ${band.cls}"
+        style=${band.style}
         data-id=${opts.groupId ?? e.id}
         aria-expanded=${expanded ? "true" : "false"}
         aria-controls=${open ? detailId(e.id) : nothing}
@@ -959,6 +1061,7 @@ export class EventReelCard extends LitElement {
           >
           ${comfortable && e.description ? html`<span class="desc">${e.description}</span>` : nothing}
           ${meta || threat ? html`<span class="sub">${threatBadge}${meta}</span>` : nothing}
+          ${band.text}
         </span>
         <span class="meta">${meta}</span>
         ${
@@ -1088,12 +1191,14 @@ export class EventReelCard extends LitElement {
       const last = item.events[item.events.length - 1];
       const open = this._openGroups.has(item.id);
       const icon = iconFor(last);
+      const burstBand = this._bandMark(item.events.map((x) => x.start));
       return html`<div
         class="item ${this._highlight === item.id ? "highlight" : ""}"
         role="listitem"
       >
         <button
-          class="row plain"
+          class="row plain ${burstBand.cls}"
+          style=${burstBand.style}
           data-id=${item.id}
           aria-expanded=${open ? "true" : "false"}
           @click=${() => this._toggleGroup(item.id)}
@@ -1106,6 +1211,7 @@ export class EventReelCard extends LitElement {
           <span class="main">
             <span class="title">${this._segmentsText(item.segments)}</span>
             <span class="sub">${this._time(item.start)}–${this._time(item.end)}</span>
+            ${burstBand.text}
           </span>
           <span class="meta">${this._time(item.start)}–${this._time(item.end)}</span>
           <span class="dot-space"></span>
@@ -1143,6 +1249,7 @@ export class EventReelCard extends LitElement {
         time: item.sortTime,
         badge: t("group.count", { count: item.events.length }),
         threat: highestThreat(item.events),
+        times: item.events.map((x) => x.start),
         meta,
         groupId: item.id,
       })}
@@ -1249,10 +1356,31 @@ export class EventReelCard extends LitElement {
     }
     for (const o of cams) this._cameraNames.set(o.key, o.name);
     const showCams = cams.length > 1 || !!camera;
-    if (!counts.length && !showCams && !unreviewed.length) return nothing;
+    const picked = this._filter.bands ?? new Set<string>();
+    const bandCount = bandCounts(items, this._bands);
+    // A band shows when it falls in the view, also with no rows (its color still needs a
+    // name), or when it is picked, so it can be switched off.
+    const bandChips = cfg.filters
+      ? this._bands.filter((b) => b.intervals.length || picked.has(b.key))
+      : [];
+    if (!counts.length && !showCams && !unreviewed.length && !bandChips.length) return nothing;
     const markLabel = t("action.mark_all_reviewed_n", { count: unreviewed.length });
     return html`<div class="toolbar">
       <div class="chipbar" role="group" aria-label=${t("filter.label")}>
+        ${bandChips.map(
+          (b) =>
+            html`<button
+              class="fchip bandchip"
+              aria-pressed=${picked.has(b.key) ? "true" : "false"}
+              title=${t("filter.band", { label: b.label })}
+              style="--c:${b.color}"
+              @click=${() => this._toggleBand(b.key)}
+            >
+              <span class="swatch"></span>
+              <span>${b.label}</span>
+              <span class="n">${bandCount.get(b.key) ?? 0}</span>
+            </button>`,
+        )}
         ${counts.map(
           (c) =>
             html`<button
@@ -1297,7 +1425,7 @@ export class EventReelCard extends LitElement {
 
   private _strip(filtered: TimelineItem[]) {
     if (!this._config?.dayStrip || !this._range || !this._loaded) return nothing;
-    const model = stripModel(filtered, this._range, this._tz());
+    const model = stripModel(filtered, this._viewRange()!, this._tz(), 6, this._bands);
     const opts = this._timeOpts();
     return html`<event-reel-strip
       .model=${model}
@@ -1310,6 +1438,18 @@ export class EventReelCard extends LitElement {
       @strip-select=${(ev: CustomEvent<{ position: number; id?: string }>) =>
         this._onStripSelect(ev, filtered)}
     ></event-reel-strip>`;
+  }
+
+  /** Without the filter chips, which name the bands, a legend says what the colors mean. */
+  private _legend() {
+    if (this._config?.filters) return nothing;
+    const bands = this._bands.filter((b) => b.intervals.length);
+    if (!bands.length) return nothing;
+    return html`<div class="legend">
+      ${bands.map(
+        (b) => html`<span style="--c:${b.color}"><span class="swatch"></span>${b.label}</span>`,
+      )}
+    </div>`;
   }
 
   private _stripValueText(items: TimelineItem[]): string {
@@ -1402,11 +1542,63 @@ export class EventReelCard extends LitElement {
     </div>`;
   }
 
+  /**
+   * The range on screen: the live range runs on to now between refreshes, so a band or row
+   * that began after the last refresh still has a place on the strip.
+   */
+  private _viewRange(): TimeRange | undefined {
+    const range = this._range;
+    if (!range || this._day) return range;
+    return { start: range.start, end: Math.max(range.end, clock.now()) };
+  }
+
+  /** The context bands over the view; the live range's bands run on to now (§5.6). */
+  private _computeBands(): ContextBand[] {
+    const cfg = this._config;
+    if (!cfg?.context.length || !this._range) return [];
+    const now = clock.now();
+    const range = this._viewRange()!;
+    return contextBands(
+      cfg.context,
+      this._context,
+      range,
+      now,
+      (id) => this._hass?.states[id]?.attributes.friendly_name ?? id,
+    );
+  }
+
+  /** A row's band edge and its text for screen readers, by the time the row shows. */
+  private _bandMark(times: number[]) {
+    const band = bandAt(this._bands, times);
+    return band
+      ? {
+          cls: "inband",
+          style: `--band:${band.color}`,
+          text: html`<span class="sr-only"> · ${band.label}</span>`,
+        }
+      : { cls: "", style: "", text: nothing };
+  }
+
+  private _toggleBand(key: string) {
+    const bands = new Set(this._filter.bands);
+    if (bands.has(key)) bands.delete(key);
+    else bands.add(key);
+    this._filter = { ...this._filter, bands };
+  }
+
   protected override render() {
     if (!this._config) return nothing;
     const t = this._localize;
-    const shown = visibleRows(this._items, this._filter, this._config.maxEvents, (item) =>
-      itemEvents(item).some((e) => this._isReached(e)),
+    this._bands = this._computeBands();
+    // A picked band the config no longer has is ignored, so it can't hide every row.
+    const picked = this._bands.filter((b) => this._filter.bands?.has(b.key));
+    const inBand = picked.length ? inAnyBand(picked) : undefined;
+    const shown = visibleRows(
+      this._items,
+      this._filter,
+      this._config.maxEvents,
+      (item) => itemEvents(item).some((e) => this._isReached(e)),
+      inBand,
     );
     const filtered = shown.list;
     const hasItems = this._loaded && this._items.length > 0;
@@ -1430,7 +1622,7 @@ export class EventReelCard extends LitElement {
         ${
           hasItems
             ? html`<div class="sticky">
-                ${this._toolbar(this._items, filtered)} ${this._strip(filtered)}
+                ${this._toolbar(this._items, filtered)} ${this._strip(filtered)} ${this._legend()}
               </div>`
             : nothing
         }

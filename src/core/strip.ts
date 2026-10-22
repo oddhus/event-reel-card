@@ -2,6 +2,7 @@
 // the visible range (PLAN.md §5.1). Pure.
 
 import type { Category, TimeRange } from "../types";
+import type { ContextBand } from "./context";
 import { itemEvents, primaryCategory } from "./filters";
 import type { TimelineItem } from "./grouping";
 import { hourStart, zonedParts } from "./time";
@@ -19,6 +20,16 @@ export interface StripModel {
   buckets: number[];
   /** Hour marks to label, with position 0..1. */
   marks: { pos: number; epoch: number }[];
+  /** Context band spans (§5.6); `lane` is the band's index, for its edge at the top. */
+  bands: StripBand[];
+}
+
+export interface StripBand {
+  lane: number;
+  /** 0..1 across the range. */
+  pos: number;
+  width: number;
+  color: string;
 }
 
 const clamp = (x: number) => Math.min(1, Math.max(0, x));
@@ -28,6 +39,7 @@ export function stripModel(
   range: TimeRange,
   timeZone: string,
   markEveryHours = 6,
+  contextBands: ContextBand[] = [],
 ): StripModel {
   const span = Math.max(1, range.end - range.start);
   const pos = (t: number) => clamp((t - range.start) / span);
@@ -55,7 +67,19 @@ export function stripModel(
     if (p.minute === 0 && p.hour % markEveryHours === 0) marks.push({ pos: pos(t), epoch: t });
   }
 
-  return { ticks, buckets, marks };
+  const bands = contextBands
+    .flatMap((b, lane) =>
+      b.intervals.map((i) => ({
+        lane,
+        pos: pos(i.start),
+        // An open band runs to the end of the range (now, in the live range).
+        width: (i.open ? 1 : pos(i.end)) - pos(i.start),
+        color: b.color,
+      })),
+    )
+    .filter((b) => b.width > 0);
+
+  return { ticks, buckets, marks, bands };
 }
 
 /** Time at a horizontal position (0..1). */

@@ -10,6 +10,10 @@ All notable changes to this project are documented here. The project uses
 - A card with nothing to read from (no entities, and no Frigate, Event Reel or LLM Vision)
   now says so and how to set it up, with a link to the setup guide, instead of looking
   like a quiet day.
+- Context bands: `context:` takes up to four entities and states, such as away mode or
+  `sun.sun` below the horizon. The day strip shades those periods, rows inside one get an
+  edge in its color, and a chip per band shows only the events inside it. YAML only; see
+  the README's "Context bands".
 
 ### Fixed
 
