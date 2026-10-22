@@ -119,8 +119,18 @@ function buildSegments(events: ReelEvent[], bounceWindow: number): BurstSegment[
   return segments;
 }
 
-const latest = (events: ReelEvent[]) => Math.max(...events.map((e) => e.start));
-const span = (events: ReelEvent[]) => ({
+/** A row of its own for one event. */
+export const eventItem = (e: ReelEvent): TimelineItem => ({
+  kind: "event",
+  id: e.id,
+  event: e,
+  sortTime: e.start,
+  start: e.start,
+  end: e.end ?? e.start,
+});
+
+export const latest = (events: ReelEvent[]) => Math.max(...events.map((e) => e.start));
+export const span = (events: ReelEvent[]) => ({
   start: Math.min(...events.map((e) => e.start)),
   end: Math.max(...events.map((e) => e.end ?? e.start)),
 });
@@ -130,18 +140,9 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
   const ascending = [...events].sort((a, b) => a.start - b.start);
   const items: TimelineItem[] = [];
 
-  const single = (e: ReelEvent): TimelineItem => ({
-    kind: "event",
-    id: e.id,
-    event: e,
-    sortTime: e.start,
-    start: e.start,
-    end: e.end ?? e.start,
-  });
-
   const pushBursts = (list: ReelEvent[]) => {
     for (const c of chain(list, (a, b) => b.start - a.start, opts.window)) {
-      if (c.length === 1) items.push(single(c[0]));
+      if (c.length === 1) items.push(eventItem(c[0]));
       else
         items.push({
           kind: "burst",
@@ -179,7 +180,7 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
   }
   for (const [camera, list] of byCamera) {
     for (const c of chain(list, (a, b) => b.start - (a.end ?? a.start), opts.window)) {
-      if (c.length === 1) items.push(single(c[0]));
+      if (c.length === 1) items.push(eventItem(c[0]));
       else
         items.push({
           kind: "camera",
@@ -194,7 +195,7 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
 
   // Everything else stays a row of its own.
   for (const e of ascending) {
-    if (!mediaKey(e) && !isBurstable(e) && e.category !== "presence") items.push(single(e));
+    if (!mediaKey(e) && !isBurstable(e) && e.category !== "presence") items.push(eventItem(e));
   }
 
   return items.sort((a, b) => b.sortTime - a.sortTime);

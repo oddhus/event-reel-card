@@ -138,6 +138,40 @@ export const styles = css`
     color: var(--primary-text-color);
     -webkit-tap-highlight-color: transparent;
   }
+  /* Inside a context band (§5.6): an inset edge in its color, so the layout doesn't shift. */
+  .row.inband {
+    box-shadow: inset 3px 0 0 var(--band);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .swatch {
+    flex: none;
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--c);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 2px 16px 0;
+    font-size: 0.75em;
+    color: var(--secondary-text-color);
+  }
+  .legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
   .row.camera {
     min-height: var(--reel-row-camera);
   }

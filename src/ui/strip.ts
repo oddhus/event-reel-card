@@ -144,6 +144,13 @@ export class EventReelStrip extends LitElement {
         @pointerup=${this.onUp}
         @pointercancel=${this.onCancel}
       >
+        ${m.bands.map(
+          (b) =>
+            html`<span
+              class="band"
+              style="left:${b.pos * 100}%;width:${b.width * 100}%;--c:${b.color};--lane:${b.lane}"
+            ></span>`,
+        )}
         ${m.buckets.map((b, i) =>
           b
             ? html`<span
@@ -192,6 +199,22 @@ export class EventReelStrip extends LitElement {
     .bar:focus-visible {
       outline: 2px solid var(--primary-color);
       outline-offset: 2px;
+    }
+    .band {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: color-mix(in srgb, var(--c) 18%, transparent);
+    }
+    /* Each band's own lane along the top, so overlapping bands stay apart. */
+    .band::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(var(--lane) * 3px);
+      height: 3px;
+      background: var(--c);
     }
     .hist {
       position: absolute;

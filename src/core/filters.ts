@@ -1,7 +1,7 @@
 // Summary counts and filtering for timeline items (PLAN.md §5.1). Pure.
 
 import type { Category, ReelEvent } from "../types";
-import { mediaKey } from "./grouping";
+import { eventItem, latest, mediaKey, span } from "./grouping";
 import type { TimelineItem } from "./grouping";
 
 /** Display order of category chips. */
@@ -25,6 +25,8 @@ export interface FilterState {
   categories: Set<Category>;
   /** A camera key from `mediaKey`; undefined = all. */
   camera?: string;
+  /** Context band entities (§5.6); empty or undefined = no band filter. */
+  bands?: Set<string>;
 }
 
 /** The camera an event belongs to, for the camera filter; not per-event media keys. */
@@ -146,9 +148,42 @@ export function capItems(
   return capList(items, max, (item) => itemEvents(item).length, keep);
 }
 
-export function applyFilters(items: TimelineItem[], state: FilterState): TimelineItem[] {
-  if (!state.categories.size && !state.camera) return items;
-  return items.filter((item) => {
+/**
+ * The items with an event that `hit` accepts. A camera group narrows to those events, or to a
+ * row of its own when one is left; a burst stays whole, since its steps read as one line.
+ * Newest first.
+ */
+export function narrowItems(items: TimelineItem[], hit: (e: ReelEvent) => boolean): TimelineItem[] {
+  const out: TimelineItem[] = [];
+  for (const item of items) {
+    if (item.kind === "event") {
+      if (hit(item.event)) out.push(item);
+    } else if (item.kind === "burst") {
+      if (item.events.some(hit)) out.push(item);
+    } else {
+      const events = item.events.filter(hit);
+      if (events.length === item.events.length) out.push(item);
+      else if (events.length === 1) out.push(eventItem(events[0]));
+      else if (events.length) {
+        out.push({ ...item, events, sortTime: latest(events), ...span(events) });
+      }
+    }
+  }
+  return out.sort((a, b) => b.sortTime - a.sortTime);
+}
+
+/**
+ * Category and camera keep whole rows. `inBand` (from the selected band chips) narrows camera
+ * groups to events inside a band; with category chips on, the same event must also be in one
+ * of those categories, so a group never shows an event of another category.
+ */
+export function applyFilters(
+  items: TimelineItem[],
+  state: FilterState,
+  inBand?: (e: ReelEvent) => boolean,
+): TimelineItem[] {
+  if (!state.categories.size && !state.camera && !inBand) return items;
+  const kept = items.filter((item) => {
     if (state.categories.size) {
       const cats = itemCategories(item);
       if (![...state.categories].some((c) => cats.has(c))) return false;
@@ -156,6 +191,9 @@ export function applyFilters(items: TimelineItem[], state: FilterState): Timelin
     if (state.camera && !itemCameras(item).has(state.camera)) return false;
     return true;
   });
+  if (!inBand) return kept;
+  const cats = state.categories;
+  return narrowItems(kept, (e) => inBand(e) && (!cats.size || cats.has(e.category)));
 }
 
 /**
@@ -167,6 +205,7 @@ export function visibleRows(
   state: FilterState,
   max: number,
   keep?: (item: TimelineItem) => boolean,
+  inBand?: (e: ReelEvent) => boolean,
 ): Capped<TimelineItem> {
-  return capItems(applyFilters(items, state), max, keep);
+  return capItems(applyFilters(items, state, inBand), max, keep);
 }

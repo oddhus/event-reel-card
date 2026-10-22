@@ -223,6 +223,15 @@ card.setConfig({
   ],
   ...(withLlmVision ? { llmvision: { non_camera: false } } : {}),
   ...(params.get("max") ? { max_events: Number(params.get("max")) } : {}),
+  ...(params.get("context") === "0"
+    ? {}
+    : {
+        context: [
+          { entity: "input_boolean.away_mode", label: "Away" },
+          { entity: "sun.sun", state: "below_horizon", label: "Dark" },
+        ],
+      }),
+  ...(params.get("filters") === "0" ? { filters: false } : {}),
 });
 stage.appendChild(card);
 

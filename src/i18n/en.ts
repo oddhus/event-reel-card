@@ -86,6 +86,7 @@ export const en = {
   "filter.all_cameras": "All cameras",
   "filter.camera": "Camera",
   "filter.clear": "Show all",
+  "filter.band": "Only events during {label}",
   "list.capped": "Older events not shown: {count} (limit {max}).",
   "action.mark_reviewed": "Mark reviewed",
   "action.mark_all_reviewed": "Mark all reviewed",

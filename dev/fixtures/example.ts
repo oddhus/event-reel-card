@@ -212,5 +212,24 @@ export function exampleData(now: number): ExampleData {
     "animal",
   );
 
+  // Context bands (§5.6): away for a work day with a short blip when someone came back for
+  // something, and dark from the evening to the morning. The first row is the state at the
+  // start of the range, as `include_start_time_state` gives it.
+  const row = (s: string, t: number) => ({ s, a: {}, lu: t });
+  history["input_boolean.away_mode"] = [
+    row("off", h(24)),
+    row("on", h(10.5)),
+    row("off", h(10.45)),
+    row("on", h(10.4)),
+    row("unavailable", h(7)),
+    row("on", h(6.99)),
+    row("off", h(2.2)),
+  ];
+  history["sun.sun"] = [
+    row("below_horizon", h(24)),
+    row("above_horizon", h(14)),
+    row("below_horizon", h(3.5)),
+  ];
+
   return { reviews, llmvision, eventReel, logbook, history, nestToken };
 }

@@ -35,6 +35,8 @@ A Home Assistant dashboard card that shows **one compact timeline of the day's e
   row. A second description of the same visit shows inside that row.
 - **Filters and overview.** Category chips, a camera menu and a 24-hour strip you can tap,
   drag or step through with the arrow keys.
+- **Context bands.** Shade the times you were away, or the night, on the strip and the rows,
+  and show only the events inside them with one tap.
 - **Earlier days.** Step back a day at a time with ‹ and ›, and jump back to today.
 - **Mark reviewed.** Mark one Frigate review, or all visible ones, as reviewed.
 - **Deep links.** `?reel=<id>` opens an event, so a notification can link straight to the
@@ -162,7 +164,7 @@ cameras:
 | `language` | `auto` | `auto` (your HA language), `en` or `nb`. |
 | `max_events` | `200` | Most events to show, counted after the filters. A note under the list says how many older ones are hidden. |
 | `refresh_interval` | `60` | Seconds between refreshes while the card is visible. |
-| `filters` | `true` | Show the category chips and camera menu. |
+| `filters` | `true` | Show the category chips, the camera menu and the context band chips. |
 | `day_strip` | `true` | Show the 24-hour strip. |
 | `day_navigation` | `true` | Show the ‹ › buttons for earlier days. A past day runs from midnight to midnight. How far back it finds events depends on how long each source keeps them; the recorder keeps 10 days by default. |
 | `entities` | none | Entities whose state changes appear. An item is an entity id or an object with `entity`, `name`, `icon`, `category`, `states` (labels per state), `only_states` and `actor_attribute`. |
@@ -174,9 +176,34 @@ cameras:
 | `cameras` | none | Per camera entity: `name`, and `clip: auto` or `preview`. |
 | `grouping.window` | `120` | Seconds between events that still group into one row. |
 | `merge.before` / `merge.after` | `15` / `30` | How far (seconds) an AI event may lie before the start or after the end of a Frigate review and still be merged with it. |
+| `context` | none | Up to four periods to highlight, such as away mode or night. An item is an entity id (in the state `on`) or an object with `entity`, `state` (a state or a list, default `on`), `label` and `color`. See [Context bands](#context-bands). |
 
 `enabled: false` inside a provider object switches it off but keeps its options; the visual
 editor writes that.
+
+### Context bands
+
+Mark the times when something was true, such as nobody home or the dark hours. The strip
+shades those periods, rows inside one get an edge in its color, and a chip per band shows
+only the events inside it: "what happened while we were away" is one tap.
+
+```yaml
+context:
+  - entity: input_boolean.away_mode   # on = away
+    label: Away
+  - entity: sun.sun
+    state: below_horizon
+    label: Dark
+```
+
+Any entity works, for example an alarm panel (`state: [armed_away, armed_vacation]`), a
+schedule helper, or `zone.home` with `state: "0"` (nobody home). `color` takes a Home
+Assistant color name (`red`, `indigo`, `amber`, `teal`…) or any CSS color; by default, and for a value
+that isn't a color, the bands are indigo, amber, teal and pink in order. Where bands overlap, a row takes the color of the
+first one listed. The card reads the periods from the recorder's history, so earlier days
+work as far back as it keeps data (10 days by default). Short blips under 5 minutes, and
+`unavailable` while Home Assistant restarts, don't split a period. Context bands are set in
+YAML; the visual editor keeps them.
 
 ### Running next to an automation
 
