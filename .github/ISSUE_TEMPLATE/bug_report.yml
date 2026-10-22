@@ -58,11 +58,13 @@ body:
     id: config
     attributes:
       label: Card configuration
-      description: The card's YAML, with your own names replaced.
+      description: The card's YAML, with your own entity ids and names replaced.
       render: yaml
   - type: textarea
     id: console
     attributes:
       label: Browser console errors
-      description: Errors that mention the card, from the browser's developer tools (F12 → Console).
+      description: >-
+        Errors that mention the card, from the browser's developer tools (F12 → Console).
+        Remove hostnames, tokens and `authSig=` values from any URLs first.
       render: text
