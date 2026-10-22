@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCameraRegistry, isNestToken } from "../src/core/cameras";
+import { buildCameraRegistry, frigateSignature, isNestToken } from "../src/core/cameras";
 import type { HassEntity } from "../src/ha-types";
 
 const state = (entity_id: string, attributes: Record<string, unknown> = {}): HassEntity => ({
@@ -111,5 +111,38 @@ describe("aliases on every lookup", () => {
     expect(reg.byFrigate("frigate", "backyard")).toBe("camera.backyard_reolink");
     expect(reg.byDevice("d-f")).toBe("camera.backyard_reolink");
     expect(reg.resolve("camera.backyard")).toBe("camera.backyard_reolink");
+  });
+});
+
+describe("frigateSignature", () => {
+  const cam = (id: string, attributes: Record<string, unknown>) => ({
+    entity_id: id,
+    state: "idle",
+    attributes,
+    last_changed: "",
+    last_updated: "",
+  });
+
+  it("changes when Frigate gives a known camera its attributes (Frigate loading late)", () => {
+    const before = { "camera.yard": cam("camera.yard", { friendly_name: "Yard", restored: true }) };
+    const after = {
+      "camera.yard": cam("camera.yard", { client_id: "frigate", camera_name: "yard" }),
+    };
+    expect(frigateSignature(before)).toBe("");
+    expect(frigateSignature(after)).toBe("camera.yard=frigate/yard");
+  });
+
+  it("ignores other entities and other camera attributes, in any order", () => {
+    const a = {
+      "camera.b": cam("camera.b", { client_id: "frigate", camera_name: "b", motion: "on" }),
+      "camera.a": cam("camera.a", { client_id: "frigate", camera_name: "a" }),
+      "sensor.x": cam("sensor.x", { client_id: "frigate", camera_name: "x" }),
+    };
+    const b = {
+      "camera.a": cam("camera.a", { client_id: "frigate", camera_name: "a", motion: "off" }),
+      "camera.b": cam("camera.b", { client_id: "frigate", camera_name: "b" }),
+    };
+    expect(frigateSignature(a)).toBe("camera.a=frigate/a,camera.b=frigate/b");
+    expect(frigateSignature(b)).toBe(frigateSignature(a));
   });
 });

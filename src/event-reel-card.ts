@@ -4,7 +4,7 @@ import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { normalizeConfig } from "./config";
 import type { CardConfig, NormalizedConfig } from "./config";
-import { buildCameraRegistry } from "./core/cameras";
+import { buildCameraRegistry, frigateSignature } from "./core/cameras";
 import type { CameraRegistry } from "./core/cameras";
 import { detectCapabilities, hasSource, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
@@ -188,6 +188,8 @@ export class EventReelCard extends LitElement {
   /** State changes of the context entities in view, oldest first (§5.6). */
   private _context = new Map<string, Transition[]>();
   private _contextToken = 0;
+  /** `frigateSignature` of the states the registry was built from. */
+  private _frigateSig = "";
   /** The bands of the last render, for the rows' edges. */
   private _bands: ContextBand[] = [];
   private _highlightTimer?: number;
@@ -257,13 +259,20 @@ export class EventReelCard extends LitElement {
       return;
     }
     if (!prev) return;
-    if (prev.entities !== hass.entities || prev.services !== hass.services) {
+    // Frigate is found by its cameras' attributes, which arrive in `states` when it loads.
+    const frigateChanged =
+      prev.states !== hass.states && frigateSignature(hass.states) !== this._frigateSig;
+    if (prev.entities !== hass.entities || prev.services !== hass.services || frigateChanged) {
       // An integration may show up after the card started (a cold load, HA restarting):
       // fetch from it now rather than on the next refresh.
       const before = this._activeTypes();
       this._buildRegistry();
       const appeared = this._activeTypes().filter((type) => !before.includes(type));
-      if (appeared.length) this._refresh(appeared);
+      if (appeared.length) {
+        // "Loading…" until it answers, rather than "No events" on an empty list.
+        if (!this._items.length) this._partial = true;
+        this._refresh(appeared);
+      }
     }
 
     this._liveContext(prev, hass);
@@ -411,6 +420,7 @@ export class EventReelCard extends LitElement {
       aliases: this._config.cameraAliases,
     });
     this._caps = detectCapabilities(this._hass, this._cameras);
+    this._frigateSig = frigateSignature(this._hass.states);
   }
 
   private _ctx(now = clock.now()): ProviderContext {

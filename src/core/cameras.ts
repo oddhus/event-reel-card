@@ -103,6 +103,22 @@ export function buildCameraRegistry(input: CameraRegistryInput): CameraRegistry 
   };
 }
 
+/**
+ * The Frigate cameras among these states, as one string. It changes when the Frigate
+ * integration gives its cameras their attributes after the card started (Frigate loading
+ * late), or a camera is added or removed; the entity registry may not change then.
+ */
+export function frigateSignature(states: Record<string, HassEntity>): string {
+  const keys: string[] = [];
+  for (const [entityId, state] of Object.entries(states)) {
+    if (!entityId.startsWith("camera.")) continue;
+    const instance = str(state.attributes.client_id);
+    const camera = str(state.attributes.camera_name);
+    if (instance && camera) keys.push(`${entityId}=${instance}/${camera}`);
+  }
+  return keys.sort().join(",");
+}
+
 /** LLM Vision stores the last path segment of a Nest attachment (base64 of a JSON array) as camera_name. */
 export function isNestToken(value: string): boolean {
   if (!value || value.includes(".") || value.length < 8) return false;
