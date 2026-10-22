@@ -336,7 +336,7 @@ describe("review fixes", () => {
     normalizeConfig({ type: "custom:event-reel-card", context } as never).context;
 
   it("rejects a malformed entity id, which would fail the history of every band", () => {
-    expect(() => ctx(["away_mode"])).toThrow(/needs an entity id/);
+    expect(() => ctx(["away"])).toThrow(/needs an entity id/);
     expect(() => ctx([{ entity: "" }])).toThrow(/needs an entity id/);
     expect(() => ctx([{ entity: "Input_Boolean.Away" }])).toThrow(/needs an entity id/);
     // Home Assistant's own rule: no leading, trailing or double underscores.

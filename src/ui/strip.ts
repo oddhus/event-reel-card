@@ -128,6 +128,12 @@ export class EventReelStrip extends LitElement {
     if (!m) return nothing;
     const max = Math.max(1, ...m.buckets);
     const width = 100 / m.buckets.length;
+    // With no rows (a quiet day that only shows context bands) there is nothing to step to:
+    // a picture, not a slider. The band chips or the legend name the bands.
+    if (!m.ticks.length) {
+      return html`<div class="bar still" aria-hidden="true">${this.layers(m, width, max)}</div>
+        ${this.labelRow(m)}`;
+    }
     return html`
       <div
         class="bar"
@@ -144,40 +150,50 @@ export class EventReelStrip extends LitElement {
         @pointerup=${this.onUp}
         @pointercancel=${this.onCancel}
       >
-        ${m.bands.map(
-          (b) =>
-            html`<span
-              class="band"
-              style="left:${b.pos * 100}%;width:${b.width * 100}%;--c:${b.color};--lane:${b.lane}"
-            ></span>`,
-        )}
-        ${m.buckets.map((b, i) =>
-          b
-            ? html`<span
-                class="hist"
-                style="left:${i * width}%;width:${width}%;height:${Math.round((b / max) * 100)}%"
-              ></span>`
-            : nothing,
-        )}
-        ${m.marks.map((mark) => html`<span class="mark" style="left:${mark.pos * 100}%"></span>`)}
-        ${m.ticks.map(
-          (t) =>
-            html`<span
-              class="tick ${t.id === this.selected ? "selected" : ""} ${t.id === this.cursor ? "cursor" : ""}"
-              style="left:${t.pos * 100}%;--c:${CATEGORY_COLORS[t.category]}"
-            ></span>`,
-        )}
-        ${this.live ? html`<span class="now"></span>` : nothing}
+        ${this.layers(m, width, max)}
       </div>
-      <div class="labels" aria-hidden="true">
-        ${m.marks.map(
-          (mark, i) =>
-            html`<span class="label" style="left:${mark.pos * 100}%"
-              >${this.labels?.[i] ?? ""}</span
-            >`,
-        )}
-      </div>
+      ${this.labelRow(m)}
     `;
+  }
+
+  private layers(m: StripModel, width: number, max: number) {
+    return html`
+      ${m.bands.map(
+        (b) =>
+          html`<span
+            class="band"
+            style="left:${b.pos * 100}%;width:${b.width * 100}%;--c:${b.color};--lane:${b.lane}"
+          ></span>`,
+      )}
+      ${m.buckets.map((b, i) =>
+        b
+          ? html`<span
+              class="hist"
+              style="left:${i * width}%;width:${width}%;height:${Math.round((b / max) * 100)}%"
+            ></span>`
+          : nothing,
+      )}
+      ${m.marks.map((mark) => html`<span class="mark" style="left:${mark.pos * 100}%"></span>`)}
+      ${m.ticks.map(
+        (t) =>
+          html`<span
+            class="tick ${t.id === this.selected ? "selected" : ""} ${t.id === this.cursor ? "cursor" : ""}"
+            style="left:${t.pos * 100}%;--c:${CATEGORY_COLORS[t.category]}"
+          ></span>`,
+      )}
+      ${this.live ? html`<span class="now"></span>` : nothing}
+    `;
+  }
+
+  private labelRow(m: StripModel) {
+    return html`<div class="labels" aria-hidden="true">
+      ${m.marks.map(
+        (mark, i) =>
+          html`<span class="label" style="left:${mark.pos * 100}%"
+            >${this.labels?.[i] ?? ""}</span
+          >`,
+      )}
+    </div>`;
   }
 
   static override styles = css`
@@ -195,6 +211,9 @@ export class EventReelStrip extends LitElement {
       overflow: hidden;
       cursor: pointer;
       touch-action: pan-y;
+    }
+    .bar.still {
+      cursor: default;
     }
     .bar:focus-visible {
       outline: 2px solid var(--primary-color);

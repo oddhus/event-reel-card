@@ -192,9 +192,10 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
 
 /**
  * Home Assistant's entity id format (`valid_entity_id`): `domain.object_id` in lower case,
- * with no leading, trailing or double underscore.
+ * with no leading, trailing or double underscore. Written without lookbehind, which older
+ * Safari can't parse.
  */
-const ENTITY_ID = /^(?!.+__)(?!_)[\da-z_]+(?<!_)\.(?!_)[\da-z_]+(?<!_)$/;
+const ENTITY_ID = /^[\da-z]+(?:_[\da-z]+)*\.[\da-z]+(?:_[\da-z]+)*$/;
 
 function normalizeContext(value: unknown): NormalizedContext[] {
   if (value == null) return [];
