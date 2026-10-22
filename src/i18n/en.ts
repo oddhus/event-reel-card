@@ -4,6 +4,10 @@ export const en = {
   "empty.yesterday": "No events yesterday",
   "empty.day": "No events this day",
   "empty.last": "Last event: {when}",
+  "empty.setup": "Nothing to show yet",
+  "empty.setup_hint":
+    "Add doors, locks or people under Entities in the card editor, or install Frigate, Event Reel or LLM Vision.",
+  "empty.setup_link": "How to set it up",
   loading: "Loading…",
   "nav.label": "Day",
   "nav.previous_day": "Previous day",

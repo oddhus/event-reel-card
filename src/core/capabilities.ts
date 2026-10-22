@@ -34,3 +34,10 @@ export function providerStatus(
   if (!toggle.enabled) return "off";
   return caps[type] ? "active" : "missing";
 }
+
+/** Whether any provider can bring events; with none, the card shows how to set it up. */
+export function hasSource(config: NormalizedConfig, caps: Capabilities): boolean {
+  return (["entity", "llmvision", "event_reel", "frigate"] as const).some(
+    (type) => providerStatus(type, config, caps) === "active",
+  );
+}

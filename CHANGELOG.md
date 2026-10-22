@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- A card with nothing to read from (no entities, and no Frigate, Event Reel or LLM Vision)
+  now says so and how to set it up, with a link to the setup guide, instead of looking
+  like a quiet day.
+
 ## [0.4.1] - 2026-10-21
 
 ### Fixed
