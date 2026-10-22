@@ -382,6 +382,7 @@ export const styles = css`
   }
   .fchip,
   .camsel,
+  .searchbtn,
   .markall {
     flex: none;
     display: inline-flex;
@@ -416,6 +417,55 @@ export const styles = css`
   .markall {
     color: var(--primary-color);
   }
+  .searchbtn {
+    padding: 0 6px;
+  }
+  .searchbtn[aria-expanded="true"] {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 16px 0;
+    padding: 0 4px 0 10px;
+    height: 32px;
+    border: 1px solid var(--divider-color);
+    border-radius: 16px;
+    color: var(--secondary-text-color);
+    --mdc-icon-size: 18px;
+  }
+  .search:focus-within {
+    border-color: var(--primary-color);
+  }
+  .search input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: none;
+    color: var(--primary-text-color);
+    font: inherit;
+    font-size: 0.9em;
+  }
+  .search input::-webkit-search-cancel-button {
+    display: none;
+  }
+  .search .hits {
+    flex: none;
+    font-size: 0.8em;
+    font-variant-numeric: tabular-nums;
+  }
+  .search .clear {
+    all: unset;
+    display: inline-flex;
+    padding: 4px;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .search .clear:focus-visible,
+  .searchbtn:focus-visible,
   .fchip:focus-visible,
   .camsel:focus-visible,
   .markall:focus-visible,

@@ -10,6 +10,10 @@ All notable changes to this project are documented here. The project uses
 - A card with nothing to read from (no entities, and no Frigate, Event Reel or LLM Vision)
   now says so and how to set it up, with a link to the setup guide, instead of looking
   like a quiet day.
+- Search. The magnifier after the filter chips opens a field that finds events in the range
+  shown by their title, AI description, camera, person or who changed a lock. Every word
+  must match; case and accents don't matter. A camera group shows only its matching events.
+  It comes with the filter chips, so `filters: false` hides it too.
 
 ### Fixed
 

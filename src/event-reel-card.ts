@@ -10,13 +10,22 @@ import { detectCapabilities, hasSource, providerStatus } from "./core/capabiliti
 import type { Capabilities } from "./core/capabilities";
 import { CATEGORY_COLORS, iconFor } from "./core/categories";
 import { findEvent, parseReelParam } from "./core/deeplink";
-import { cameraOptions, capList, itemEvents, summarize, visibleRows } from "./core/filters";
+import {
+  applyFilters,
+  cameraOptions,
+  capItems,
+  capList,
+  itemEvents,
+  searchAccept,
+  summarize,
+} from "./core/filters";
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
 import type { BurstSegment, TimelineItem } from "./core/grouping";
 import { Loader } from "./core/loader";
 import { MediaResolver } from "./core/media";
 import { AI_PROVIDERS, mergeEvents } from "./core/merge";
+import { countMatches, queryTerms } from "./core/search";
 import { nearestItem, stripModel, timeAt } from "./core/strip";
 import { highestThreat, withFlagged } from "./core/threat";
 import {
@@ -111,6 +120,7 @@ export class EventReelCard extends LitElement {
     _day: { state: true },
     _partial: { state: true },
     _stripCursor: { state: true },
+    _searchOpen: { state: true },
   };
 
   declare _items: TimelineItem[];
@@ -120,6 +130,8 @@ export class EventReelCard extends LitElement {
   declare _loaded: boolean;
   declare _config?: NormalizedConfig;
   declare _filter: FilterState;
+  /** The search field is shown (it also shows while it holds a query). */
+  declare _searchOpen: boolean;
   declare _highlight?: string;
   declare _notice?: string;
   /** Time of the newest event before the range, shown when the range is empty. */
@@ -199,6 +211,7 @@ export class EventReelCard extends LitElement {
     this._loaded = false;
     this._partial = true;
     this._filter = { categories: new Set() };
+    this._searchOpen = false;
   }
 
   // ----- HA card API -----
@@ -208,7 +221,10 @@ export class EventReelCard extends LitElement {
     const next = normalizeConfig(config);
     this._config = next;
     this._updateLanguage();
-    if (!next.filters) this._filter = { categories: new Set() };
+    if (!next.filters) {
+      this._filter = { categories: new Set() };
+      this._searchOpen = false;
+    }
     const leaveDay = !next.dayNavigation && this._day !== undefined;
     if (leaveDay) this._setDay(undefined);
     if (!this._started) return;
@@ -693,7 +709,7 @@ export class EventReelCard extends LitElement {
     this._pendingLink = undefined;
     this._notice = undefined;
     this._clearLinkFromUrl();
-    this._filter = { categories: new Set() };
+    this._clearFilters();
     this._reach = target.id;
     const container = this._items.find((i) => i.kind !== "event" && i.events.includes(target));
     if (container?.kind === "burst") {
@@ -781,6 +797,69 @@ export class EventReelCard extends LitElement {
   private _setCamera(key: string) {
     this._filter = { ...this._filter, camera: key || undefined };
   }
+
+  /** "Show all" and deep links: no chips, camera or query, and the search field closes. */
+  private _clearFilters() {
+    this._filter = { categories: new Set() };
+    this._searchOpen = false;
+  }
+
+  private _setQuery(query: string) {
+    this._filter = { ...this._filter, query: query || undefined };
+    // A new search starts from max_events again; only an open detail stays within reach.
+    this._reach = this._openId;
+  }
+
+  private async _toggleSearch() {
+    const open = !this._searchOpen;
+    this._searchOpen = open;
+    if (!open) {
+      this._setQuery("");
+      return;
+    }
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLInputElement>(".search input")?.focus();
+  }
+
+  /** The clear button goes away with the query, so focus returns to the field. */
+  private async _clearQuery() {
+    this._setQuery("");
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLInputElement>(".search input")?.focus();
+  }
+
+  /** Escape clears the query, then closes the field and returns to its button. */
+  private async _onSearchKey(ev: KeyboardEvent) {
+    if (ev.key !== "Escape") return;
+    // Consumed here, so a dialog around the card (HA's card editor) doesn't close too.
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (this._filter.query) {
+      this._setQuery("");
+      return;
+    }
+    this._searchOpen = false;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>(".searchbtn")?.focus();
+  }
+
+  /** What search looks through: the text a row and its detail show. */
+  private _searchText = (e: ReelEvent): string => {
+    const t = this._localize;
+    return [
+      e.title,
+      e.stateLabel,
+      e.description,
+      ...(e.extra ?? []).flatMap((x) => [x.title, x.description]),
+      this._cameraName(e),
+      ...(e.people ?? []),
+      e.actor,
+      ...(e.labels ?? []).flatMap((l) => [l, objectLabel(t, l)]),
+      ...(e.concerns ?? []),
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
 
   private async _markReviewed(events: ReelEvent[]) {
     const hass = this._hass;
@@ -1230,7 +1309,7 @@ export class EventReelCard extends LitElement {
     </div>`;
   }
 
-  private _toolbar(items: TimelineItem[], filtered: TimelineItem[]) {
+  private _toolbar(items: TimelineItem[], filtered: TimelineItem[], matches: number) {
     const t = this._localize;
     const cfg = this._config!;
     const unreviewed = filtered
@@ -1249,50 +1328,99 @@ export class EventReelCard extends LitElement {
     }
     for (const o of cams) this._cameraNames.set(o.key, o.name);
     const showCams = cams.length > 1 || !!camera;
-    if (!counts.length && !showCams && !unreviewed.length) return nothing;
+    if (!counts.length && !showCams && !unreviewed.length && !cfg.filters) return nothing;
+    const query = this._filter.query ?? "";
+    const searching = cfg.filters && (this._searchOpen || !!query);
     const markLabel = t("action.mark_all_reviewed_n", { count: unreviewed.length });
     return html`<div class="toolbar">
-      <div class="chipbar" role="group" aria-label=${t("filter.label")}>
-        ${counts.map(
-          (c) =>
-            html`<button
-              class="fchip"
-              aria-pressed=${active.has(c.category) ? "true" : "false"}
-              style="--c:${CATEGORY_COLORS[c.category]}"
-              @click=${() => this._toggleCategory(c.category)}
-            >
-              <ha-icon .icon=${iconFor({ category: c.category })}></ha-icon>
-              <span>${t(`category.${c.category}`)}</span>
-              <span class="n">${c.count}</span>
-            </button>`,
-        )}
+        <div class="chipbar" role="group" aria-label=${t("filter.label")}>
+          ${counts.map(
+            (c) =>
+              html`<button
+                class="fchip"
+                aria-pressed=${active.has(c.category) ? "true" : "false"}
+                style="--c:${CATEGORY_COLORS[c.category]}"
+                @click=${() => this._toggleCategory(c.category)}
+              >
+                <ha-icon .icon=${iconFor({ category: c.category })}></ha-icon>
+                <span>${t(`category.${c.category}`)}</span>
+                <span class="n">${c.count}</span>
+              </button>`,
+          )}
+        </div>
+        ${
+          cfg.filters
+            ? html`<button
+                class="searchbtn"
+                title=${t("search.label")}
+                aria-label=${t("search.label")}
+                aria-expanded=${searching ? "true" : "false"}
+                aria-controls=${searching ? "reel-search" : nothing}
+                @click=${() => this._toggleSearch()}
+              >
+                <ha-icon icon="mdi:magnify"></ha-icon>
+              </button>`
+            : nothing
+        }
+        ${
+          showCams
+            ? html`<select
+                class="camsel"
+                aria-label=${t("filter.camera")}
+                .value=${live(camera ?? "")}
+                @change=${(ev: Event) => this._setCamera((ev.target as HTMLSelectElement).value)}
+              >
+                <option value="">${t("filter.all_cameras")}</option>
+                ${cams.map((o) => html`<option value=${o.key}>${o.name} (${o.count})</option>`)}
+              </select>`
+            : nothing
+        }
+        ${
+          unreviewed.length
+            ? html`<button
+                class="markall"
+                title=${markLabel}
+                aria-label=${markLabel}
+                @click=${() => this._markReviewed(unreviewed)}
+              >
+                <ha-icon icon="mdi:check-all"></ha-icon><span class="n">${unreviewed.length}</span>
+              </button>`
+            : nothing
+        }
       </div>
       ${
-        showCams
-          ? html`<select
-              class="camsel"
-              aria-label=${t("filter.camera")}
-              .value=${live(camera ?? "")}
-              @change=${(ev: Event) => this._setCamera((ev.target as HTMLSelectElement).value)}
-            >
-              <option value="">${t("filter.all_cameras")}</option>
-              ${cams.map((o) => html`<option value=${o.key}>${o.name} (${o.count})</option>`)}
-            </select>`
+        searching
+          ? html`<div class="search" id="reel-search" role="search">
+              <ha-icon icon="mdi:magnify"></ha-icon>
+              <input
+                type="search"
+                enterkeyhint="search"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label=${t("search.label")}
+                placeholder=${t("search.label")}
+                .value=${live(query)}
+                @input=${(ev: Event) => this._setQuery((ev.target as HTMLInputElement).value)}
+                @keydown=${(ev: KeyboardEvent) => this._onSearchKey(ev)}
+              />
+              <span class="hits" role="status"
+                >${query ? t("search.count", { count: matches }) : ""}</span
+              >
+              ${
+                query
+                  ? html`<button
+                      class="clear"
+                      aria-label=${t("search.clear")}
+                      title=${t("search.clear")}
+                      @click=${() => this._clearQuery()}
+                    >
+                      <ha-icon icon="mdi:close"></ha-icon>
+                    </button>`
+                  : nothing
+              }
+            </div>`
           : nothing
-      }
-      ${
-        unreviewed.length
-          ? html`<button
-              class="markall"
-              title=${markLabel}
-              aria-label=${markLabel}
-              @click=${() => this._markReviewed(unreviewed)}
-            >
-              <ha-icon icon="mdi:check-all"></ha-icon><span class="n">${unreviewed.length}</span>
-            </button>`
-          : nothing
-      }
-    </div>`;
+      }`;
   }
 
   private _strip(filtered: TimelineItem[]) {
@@ -1405,9 +1533,15 @@ export class EventReelCard extends LitElement {
   protected override render() {
     if (!this._config) return nothing;
     const t = this._localize;
-    const shown = visibleRows(this._items, this._filter, this._config.maxEvents, (item) =>
+    const matching = applyFilters(this._items, this._filter, this._searchText);
+    const shown = capItems(matching, this._config.maxEvents, (item) =>
       itemEvents(item).some((e) => this._isReached(e)),
     );
+    // Every matching event, also those past the cap; a burst counts only its matching steps.
+    const terms = queryTerms(this._filter.query);
+    const matches = terms.length
+      ? countMatches(matching, terms, this._searchText, searchAccept(this._filter))
+      : 0;
     const filtered = shown.list;
     const hasItems = this._loaded && this._items.length > 0;
     return html`
@@ -1430,7 +1564,7 @@ export class EventReelCard extends LitElement {
         ${
           hasItems
             ? html`<div class="sticky">
-                ${this._toolbar(this._items, filtered)} ${this._strip(filtered)}
+                ${this._toolbar(this._items, filtered, matches)} ${this._strip(filtered)}
               </div>`
             : nothing
         }
@@ -1448,10 +1582,12 @@ export class EventReelCard extends LitElement {
                   ${shown.hidden ? this._cappedNote(shown.hidden) : nothing}`
               : this._items.length
                 ? html`<div class="empty">
-                    <button
-                      class="linkish"
-                      @click=${() => (this._filter = { categories: new Set() })}
-                    >
+                    ${
+                      this._filter.query
+                        ? html`<p>${t("search.no_match", { query: this._filter.query })}</p>`
+                        : nothing
+                    }
+                    <button class="linkish" @click=${() => this._clearFilters()}>
                       ${t("filter.clear")}
                     </button>
                   </div>`

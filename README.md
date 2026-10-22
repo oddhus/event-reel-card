@@ -35,6 +35,8 @@ A Home Assistant dashboard card that shows **one compact timeline of the day's e
   row. A second description of the same visit shows inside that row.
 - **Filters and overview.** Category chips, a camera menu and a 24-hour strip you can tap,
   drag or step through with the arrow keys.
+- **Search.** Find events in the range shown by their title, AI description, camera, person
+  or who unlocked a door.
 - **Earlier days.** Step back a day at a time with ‹ and ›, and jump back to today.
 - **Mark reviewed.** Mark one Frigate review, or all visible ones, as reviewed.
 - **Deep links.** `?reel=<id>` opens an event, so a notification can link straight to the
@@ -162,7 +164,7 @@ cameras:
 | `language` | `auto` | `auto` (your HA language), `en` or `nb`. |
 | `max_events` | `200` | Most events to show, counted after the filters. A note under the list says how many older ones are hidden. |
 | `refresh_interval` | `60` | Seconds between refreshes while the card is visible. |
-| `filters` | `true` | Show the category chips and camera menu. |
+| `filters` | `true` | Show the category chips, the camera menu and search. |
 | `day_strip` | `true` | Show the 24-hour strip. |
 | `day_navigation` | `true` | Show the ‹ › buttons for earlier days. A past day runs from midnight to midnight. How far back it finds events depends on how long each source keeps them; the recorder keeps 10 days by default. |
 | `entities` | none | Entities whose state changes appear. An item is an entity id or an object with `entity`, `name`, `icon`, `category`, `states` (labels per state), `only_states` and `actor_attribute`. |

@@ -635,6 +635,23 @@ Later:
   category, faint hourly activity in the background, context bands and a "now" line.
   Tap or drag to scroll the list to that time.
 - **"Mark all reviewed" (P1)** in the header when there are unreviewed Frigate items.
+- **Search (P2, done after 0.4.1):** a magnifier button after the chips opens a text field
+  under them (with `filters`, no option of its own). It searches the events already loaded
+  for the range or day in view, not other days. The text of an event is what its row and
+  detail show: title, state, AI description and the extra descriptions, camera name,
+  people, actor, object labels (raw and translated) and GenAI concerns. Every word of the
+  query must appear, in any order, as a substring of that text after folding case and
+  accents (`foldText`: "pa" finds "på"; ø and æ stay as they are). Substrings, not word
+  starts, because Norwegian compounds ("terrassedør") would otherwise miss. It combines with
+  the chips and camera menu: with a chip on, the matching event must also be in that
+  category (`searchAccept`). `max_events` caps after it, and a new query lets go of a row
+  kept past the cap (`_reach`) unless its detail is open. A camera group narrows to its
+  matching events (one left becomes a plain row); a burst stays whole when one step
+  matches. A live count of matching events ("3 found", also past `max_events`; a burst
+  counts only its matching steps) sits in the field. Escape clears the query, then closes the
+  field, and doesn't reach a dialog around the card. A deep link and "Show all" clear it with
+  the other filters and close the field. Searching other
+  days would need a fetch per day from every provider; left for later.
 - **Day navigation (P2, done after 0.1.0):** a `label ‹ ›` row above the chips, not
   sticky. The label is the live range ("Last 24 hours", "Today"), "Yesterday" or a date.
   ‹ goes to the previous calendar day, local midnight to midnight (23 or 25 h on DST
@@ -789,7 +806,7 @@ to the clip.
 |---|---|
 | P0 (M1) | Entity provider, LLM Vision provider, Frigate reviews provider, many-to-one merge, doorbell clips by Nest token, compact rows, grouping (bursts, bounces, camera groups), animated previews with fallback chain, HLS player with codec fallback, rolling 24 h range, nb/en |
 | P1 | Mark reviewed (+ mark all), download, filter chips and summary, day strip, deep links, GUI editor and stub config, HACS release |
-| P2 | ~~Day navigation~~ (done), context bands, calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search, presence at event time, "Summarize the day" (off by default) |
+| P2 | ~~Day navigation~~ (done), context bands, calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, ~~search~~ (done, in the loaded range; across days later), presence at event time, "Summarize the day" (off by default) |
 | P3 | Multi-camera sync, public provider API (`window.eventReel.registerProvider`), Reolink media-source provider, weekly heatmap |
 
 ---

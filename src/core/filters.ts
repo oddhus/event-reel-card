@@ -3,6 +3,7 @@
 import type { Category, ReelEvent } from "../types";
 import { mediaKey } from "./grouping";
 import type { TimelineItem } from "./grouping";
+import { queryTerms, searchItems } from "./search";
 
 /** Display order of category chips. */
 export const CATEGORY_ORDER: Category[] = [
@@ -25,7 +26,12 @@ export interface FilterState {
   categories: Set<Category>;
   /** A camera key from `mediaKey`; undefined = all. */
   camera?: string;
+  /** Free text; every word must match (`searchItems`). Empty or undefined = no search. */
+  query?: string;
 }
+
+/** The searchable text of an event, from the card (it knows camera names and labels). */
+export type TextOf = (e: ReelEvent) => string;
 
 /** The camera an event belongs to, for the camera filter; not per-event media keys. */
 export function cameraKey(e: ReelEvent): string | undefined {
@@ -146,9 +152,20 @@ export function capItems(
   return capList(items, max, (item) => itemEvents(item).length, keep);
 }
 
-export function applyFilters(items: TimelineItem[], state: FilterState): TimelineItem[] {
-  if (!state.categories.size && !state.camera) return items;
-  return items.filter((item) => {
+/** The events a query may match under the active chips: any event without chips. */
+export function searchAccept(state: FilterState): (e: ReelEvent) => boolean {
+  const cats = state.categories;
+  return cats.size ? (e) => cats.has(e.category) : () => true;
+}
+
+export function applyFilters(
+  items: TimelineItem[],
+  state: FilterState,
+  textOf?: TextOf,
+): TimelineItem[] {
+  const terms = textOf ? queryTerms(state.query) : [];
+  if (!state.categories.size && !state.camera && !terms.length) return items;
+  const kept = items.filter((item) => {
     if (state.categories.size) {
       const cats = itemCategories(item);
       if (![...state.categories].some((c) => cats.has(c))) return false;
@@ -156,6 +173,7 @@ export function applyFilters(items: TimelineItem[], state: FilterState): Timelin
     if (state.camera && !itemCameras(item).has(state.camera)) return false;
     return true;
   });
+  return textOf ? searchItems(kept, terms, textOf, searchAccept(state)) : kept;
 }
 
 /**
@@ -167,6 +185,7 @@ export function visibleRows(
   state: FilterState,
   max: number,
   keep?: (item: TimelineItem) => boolean,
+  textOf?: TextOf,
 ): Capped<TimelineItem> {
-  return capItems(applyFilters(items, state), max, keep);
+  return capItems(applyFilters(items, state, textOf), max, keep);
 }
