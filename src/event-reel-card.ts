@@ -496,7 +496,7 @@ export class EventReelCard extends LitElement {
         include_start_time_state: true,
         minimal_response: true,
         no_attributes: true,
-        significant_changes_only: false,
+        significant_changes_only: true,
       });
       if (token !== this._contextToken) return; // superseded by a newer view or refresh
       const next = new Map<string, Transition[]>();
@@ -529,7 +529,7 @@ export class EventReelCard extends LitElement {
     if (this._day || !this._config?.context.length) return;
     let changed = false;
     const next = new Map(this._context);
-    for (const { entity } of this._config.context) {
+    for (const entity of new Set(this._config.context.map((c) => c.entity))) {
       const before = prev.states[entity];
       const after = hass.states[entity];
       if (!after || before === after || before?.state === after.state) continue;
@@ -1601,7 +1601,9 @@ export class EventReelCard extends LitElement {
       inBand,
     );
     const filtered = shown.list;
-    const hasItems = this._loaded && this._items.length > 0;
+    // A quiet day still shows its bands: the strip, their chips (at 0) and the legend.
+    const showBar =
+      this._loaded && (this._items.length > 0 || this._bands.some((b) => b.intervals.length));
     return html`
       <ha-card .header=${this._config.title || undefined}>
         ${this._dayNav()} ${this._warnings()}
@@ -1620,7 +1622,7 @@ export class EventReelCard extends LitElement {
             : nothing
         }
         ${
-          hasItems
+          showBar
             ? html`<div class="sticky">
                 ${this._toolbar(this._items, filtered)} ${this._strip(filtered)} ${this._legend()}
               </div>`

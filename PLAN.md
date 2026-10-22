@@ -747,8 +747,8 @@ inside them. Use cases: "someone came while we were away" and "activity at night
 
 - **Config:** `context:` takes at most 4 items (the strip can't tell more apart): an entity
   id (state `on`) or `{entity, state (string or list, default on), label, color}`. YAML
-  only; the editor keeps it. Each entity id must look like `domain.object_id`: Home
-  Assistant refuses the history of all of them when one is malformed. Two bands may watch
+  only; the editor keeps it. Each entity id must pass Home Assistant's own rule
+  (`domain.object_id`, lower case, no leading, trailing or double underscore): it refuses the history of all of them when one is malformed. Two bands may watch
   one entity (an alarm panel's away and night states); bands are keyed by their position.
   The label defaults to the friendly name. `color` is an HA
   color name, mapped to `var(--<name>-color, <HA default>)` (the fallback serves themes
@@ -759,7 +759,8 @@ inside them. Use cases: "someone came while we were away" and "activity at night
   default color for its position instead of none.
 - **Data:** one `history/history_during_period` call per full refresh (not for a single
   provider's refetch) for all context entities: `include_start_time_state`, minimal
-  response, no attributes, all changes. The first row is the state at the range start, so
+  response, no attributes, state changes only (`significant_changes_only`, so the
+  recorder skips attribute-only rows in SQL, such as `sun.sun`'s many updates). The first row is the state at the range start, so
   a band already on starts at the left edge. Time is `lc ?? lu`. A failed call keeps the
   previous bands and logs to console.debug (bands are decoration, no warning chip). A
   newer view or refresh drops a late answer (token). Live: a changed state of a context
@@ -792,7 +793,8 @@ inside them. Use cases: "someone came while we were away" and "activity at night
   and the category must hold for the same event, so a group never shows an event of
   another category. A picked band that left the config is ignored, and a change to
   `context` clears the picks. Chips name the bands; without `filters` a small legend under
-  the strip (or the chip bar's place, without the strip) does.
+  the strip (or the chip bar's place, without the strip) does. A day with bands but no
+  events still shows the strip, the band chips (at 0) and the legend above the empty state.
 
 ### 5.7 Deep links (P1)
 

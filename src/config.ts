@@ -190,8 +190,11 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
   };
 }
 
-/** Home Assistant's entity id format: `domain.object_id`, lower case. */
-const ENTITY_ID = /^[a-z0-9_]+\.[a-z0-9_]+$/;
+/**
+ * Home Assistant's entity id format (`valid_entity_id`): `domain.object_id` in lower case,
+ * with no leading, trailing or double underscore.
+ */
+const ENTITY_ID = /^(?!.+__)(?!_)[\da-z_]+(?<!_)\.(?!_)[\da-z_]+(?<!_)$/;
 
 function normalizeContext(value: unknown): NormalizedContext[] {
   if (value == null) return [];

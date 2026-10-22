@@ -189,7 +189,7 @@ only the events inside it: "what happened while we were away" is one tap.
 
 ```yaml
 context:
-  - entity: input_boolean.away_mode   # on = away
+  - entity: input_boolean.away   # on = away
     label: Away
   - entity: sun.sun
     state: below_horizon
