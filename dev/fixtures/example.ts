@@ -216,7 +216,7 @@ export function exampleData(now: number): ExampleData {
   // something, and dark from the evening to the morning. The first row is the state at the
   // start of the range, as `include_start_time_state` gives it.
   const row = (s: string, t: number) => ({ s, a: {}, lu: t });
-  history["input_boolean.away_mode"] = [
+  history["input_boolean.away"] = [
     row("off", h(24)),
     row("on", h(10.5)),
     row("off", h(10.45)),

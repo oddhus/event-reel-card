@@ -336,9 +336,17 @@ describe("review fixes", () => {
     normalizeConfig({ type: "custom:event-reel-card", context } as never).context;
 
   it("rejects a malformed entity id, which would fail the history of every band", () => {
-    expect(() => ctx(["away_mode"])).toThrow(/needs an entity id/);
+    expect(() => ctx(["away"])).toThrow(/needs an entity id/);
     expect(() => ctx([{ entity: "" }])).toThrow(/needs an entity id/);
     expect(() => ctx([{ entity: "Input_Boolean.Away" }])).toThrow(/needs an entity id/);
+    // Home Assistant's own rule: no leading, trailing or double underscores.
+    for (const id of ["input_boolean.away_", "_x.y", "a__b.c", "a.b__c"]) {
+      expect(() => ctx([id])).toThrow(/needs an entity id/);
+    }
+    expect(ctx(["input_boolean.away_2", "sensor.a_b"]).map((c) => c.entity)).toEqual([
+      "input_boolean.away_2",
+      "sensor.a_b",
+    ]);
   });
 
   it("keys two bands on one entity apart, with their own counts", () => {

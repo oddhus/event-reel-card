@@ -227,7 +227,7 @@ card.setConfig({
     ? {}
     : {
         context: [
-          { entity: "input_boolean.away_mode", label: "Away" },
+          { entity: "input_boolean.away", label: "Away" },
           { entity: "sun.sun", state: "below_horizon", label: "Dark" },
         ],
       }),
