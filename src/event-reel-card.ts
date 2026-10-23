@@ -4,7 +4,7 @@ import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { normalizeConfig } from "./config";
 import type { CardConfig, NormalizedConfig } from "./config";
-import { buildCameraRegistry } from "./core/cameras";
+import { buildCameraRegistry, frigateSignature } from "./core/cameras";
 import type { CameraRegistry } from "./core/cameras";
 import { detectCapabilities, hasSource, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
@@ -188,6 +188,10 @@ export class EventReelCard extends LitElement {
   /** State changes of the context entities in view, oldest first (§5.6). */
   private _context = new Map<string, Transition[]>();
   private _contextToken = 0;
+  /** `frigateSignature` of the states the registry was built from. */
+  private _frigateSig = "";
+  /** Sources that appeared after the view started and haven't answered yet. */
+  private _appearing = new Set<string>();
   /** The bands of the last render, for the rows' edges. */
   private _bands: ContextBand[] = [];
   private _highlightTimer?: number;
@@ -257,13 +261,23 @@ export class EventReelCard extends LitElement {
       return;
     }
     if (!prev) return;
-    if (prev.entities !== hass.entities || prev.services !== hass.services) {
-      // An integration may show up after the card started (a cold load, HA restarting):
-      // fetch from it now rather than on the next refresh.
+    const frigateChanged = this._frigateCamerasChanged(prev, hass);
+    if (prev.entities !== hass.entities || prev.services !== hass.services || frigateChanged) {
+      // An integration may show up after the card started (a cold load, HA restarting), or
+      // go away: fetch from it, or drop its rows, now rather than on the next refresh.
       const before = this._activeTypes();
       this._buildRegistry();
-      const appeared = this._activeTypes().filter((type) => !before.includes(type));
-      if (appeared.length) this._refresh(appeared);
+      const after = this._activeTypes();
+      const appeared = after.filter((type) => !before.includes(type));
+      const gone = before.filter((type) => !after.includes(type));
+      // "Loading…" until a new source answers, rather than "No events" on an empty list.
+      for (const type of appeared) this._appearing.add(type);
+      for (const type of gone) this._appearing.delete(type); // skipped: no answer comes
+      if (appeared.length || gone.length) this._refresh([...appeared, ...gone]);
+      // Cameras added or removed while Frigate stays: fetch again, once they settle.
+      if (frigateChanged && before.includes("frigate") && after.includes("frigate")) {
+        this._debouncedRefresh("frigate", 2000);
+      }
     }
 
     this._liveContext(prev, hass);
@@ -411,6 +425,7 @@ export class EventReelCard extends LitElement {
       aliases: this._config.cameraAliases,
     });
     this._caps = detectCapabilities(this._hass, this._cameras);
+    this._frigateSig = frigateSignature(this._hass.states);
   }
 
   private _ctx(now = clock.now()): ProviderContext {
@@ -542,7 +557,41 @@ export class EventReelCard extends LitElement {
     this.requestUpdate();
   }
 
+  /**
+   * Frigate is found by its cameras' attributes, which arrive in `states` when it loads.
+   * Most updates change other entities, so only changed camera states are compared, and the
+   * signature is built only when one of them looks different.
+   */
+  private _frigateCamerasChanged(prev: HomeAssistant, hass: HomeAssistant): boolean {
+    if (prev.states === hass.states) return false;
+    let suspect = false;
+    for (const id in hass.states) {
+      if (!id.startsWith("camera.")) continue;
+      const a = prev.states[id];
+      const b = hass.states[id];
+      if (a === b) continue;
+      if (
+        !a ||
+        a.attributes.client_id !== b.attributes.client_id ||
+        a.attributes.camera_name !== b.attributes.camera_name
+      ) {
+        suspect = true;
+        break;
+      }
+    }
+    if (!suspect) {
+      for (const id in prev.states) {
+        if (id.startsWith("camera.") && !(id in hass.states)) {
+          suspect = true;
+          break;
+        }
+      }
+    }
+    return suspect && frigateSignature(hass.states) !== this._frigateSig;
+  }
+
   private _onResult(type: string, events: ReelEvent[], range: TimeRange) {
+    this._appearing.delete(type);
     this._results.set(type, events);
     this._setError(type, undefined);
     // Keep live events until the logbook has them (the recorder commits with a delay).
@@ -558,6 +607,7 @@ export class EventReelCard extends LitElement {
 
   /** A failed or slow provider keeps its last rows and gets a warning chip. */
   private _onError(type: string, reason: unknown) {
+    this._appearing.delete(type);
     if (reason === "timeout") {
       console.warn(`[event-reel] ${type} did not answer within ${FETCH_TIMEOUT} s`);
     } else {
@@ -577,6 +627,7 @@ export class EventReelCard extends LitElement {
   /** Starts a new view of the data: earlier answers are dropped, and the first paint waits. */
   private _newView() {
     this._loader.reset();
+    this._appearing.clear();
     this._waiting = true;
     this._partial = true;
     this._firstPaintDue = false;
@@ -606,7 +657,8 @@ export class EventReelCard extends LitElement {
       this._waiting = false;
       window.clearTimeout(this._firstPaintTimer);
     }
-    this._partial = !all;
+    // A source that appeared late was skipped before, so the loader counts it as settled.
+    this._partial = !all || this._appearing.size > 0;
     this._loaded = true;
     this._ensureSubscriptions();
     this._recompute();

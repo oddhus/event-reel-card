@@ -828,8 +828,17 @@ to the clip.
   and not switched off; `hasSource()` in `core/capabilities.ts`): "Nothing to show yet",
   what to add, and a link to the README's configuration section, instead of an empty range
   that would look like a quiet day (2026-10-22). Nest alone brings no events. When
-  `hass.entities` or `hass.services` changes, the card detects again and fetches from a
-  provider that just appeared, so a slow start never leaves the guidance up.
+  `hass.entities` or `hass.services` changes, or the Frigate cameras in `hass.states` do
+  (`frigateSignature`: Frigate is found by its cameras' `client_id`/`camera_name`, which
+  arrive when it loads, while the entity registry may not change), the card detects again
+  and fetches from a provider that just appeared, so a slow start never leaves the guidance
+  up. With no rows yet, it shows "Loading…" until that provider answers, not "No events"
+  (`_appearing`: the loader counts a source it skipped at start as settled). A provider that
+  goes away is skipped at once, which drops its rows, and Frigate cameras added or removed
+  while Frigate stays fetch again after 2 s. Only changed `camera.*` states are compared on
+  each update; the full signature is built when one of them looks different. Not handled:
+  a second Frigate instance appearing gets no review subscription of its own until the next
+  view (subscriptions are per provider type).
 
 ---
 

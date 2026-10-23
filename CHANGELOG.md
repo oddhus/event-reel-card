@@ -18,8 +18,10 @@ All notable changes to this project are documented here. The project uses
 ### Fixed
 
 - An integration that finishes loading after the card (a cold start, or Home Assistant
-  restarting) is picked up at once. Before, its events waited for the next refresh, up to
-  a minute, and on a past day until you navigated.
+  restarting) is picked up at once, Frigate included (found when its cameras get their
+  attributes), and the card says "Loading…" until it answers. One that goes away takes its
+  rows with it. Before, its events waited for
+  the next refresh, up to a minute, and on a past day until you navigated.
 
 ## [0.4.1] - 2026-10-21
 
