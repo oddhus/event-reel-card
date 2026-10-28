@@ -20,6 +20,9 @@ Write TypeScript and Lit 3 without decorators: `static properties` and `declare`
 Providers in `src/providers/` fetch data and normalize it into `ReelEvent`s. They never
 render. UI components never call HA APIs directly; they go through the providers and
 `core/media.ts`, which signs, resolves and caches media URLs.
+Put new templates in `src/ui/` as functions of a `CardView` (`ui/view.ts`).
+`event-reel-card.ts` keeps the HA card API, lifecycle, data and interaction, and a
+`render()` that lays the templates out.
 Keep the pure logic in `src/core/` (camera mapping, merge, grouping, time, filters, the
 day strip) free of DOM and `hass` access, so it can be unit tested.
 Keep each integration in one provider file with a small parser, so a change upstream is

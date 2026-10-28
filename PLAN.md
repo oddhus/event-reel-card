@@ -329,42 +329,60 @@ install (HA 2026.10.1, Frigate 0.18.0, Ollama).
 
 ```
 src/
-  event-reel-card.ts        # <event-reel-card>: config, lifecycle, layout
-  editor.ts                 # getConfigForm() schema (+ custom editor only if needed)
-  types.ts                  # ReelEvent, MediaRef, ProviderContext, config types
+  event-reel-card.ts        # <event-reel-card>: HA card API, lifecycle, data, interaction,
+                            #   and render(), which lays out the templates in ui/
+  editor.ts                 # GUI editor: ha-form over editor-model.ts
+  editor-model.ts           # config ↔ flat form, keeping options the form doesn't show
+  types.ts                  # ReelEvent, MediaRef, Provider, ProviderContext
+  ha-types.ts               # the parts of `hass` the card uses
   config.ts                 # normalise shorthand config → provider configs
   providers/
-    registry.ts             # registerProvider(type, factory)
     entity.ts               # core: logbook state changes + logbook.log entries
     llmvision.ts
+    eventreel.ts            # Event Reel integration: AI descriptions
     frigate.ts
-    nest.ts                 # M1: token → clip resolver only; full provider P2
-    calendar.ts             # P2: any calendar entity
-  core/
+    nest.ts                 # token → clip resolver only; full provider P2
+    calendar.ts             # P2: any calendar entity (not written yet)
+  core/                     # no DOM; media.ts calls hass and capabilities.ts reads it
     capabilities.ts         # what is installed / which optional routes work (§3.8)
     cameras.ts              # camera registry + auto-mapping (§3.4)
     merge.ts                # link AI/text events to media events (§3.5)
     grouping.ts             # bursts, bounces, camera groups (§5.3)
+    filters.ts              # category/camera/band filters, counts, max_events
+    context.ts              # context bands (§5.6)
+    strip.ts                # day strip model
+    loader.ts               # independent provider loading with a deadline (§3.7)
     media.ts                # sign_path cache, URL builders, fallback chains
+    playback.ts             # stall vs codec failure (§5.4)
+    deeplink.ts, threat.ts, categories.ts
     time.ts                 # ranges, day boundaries in HA time zone, formatting
   ui/
-    event-row.ts            # compact/comfortable row, group rows
-    event-detail.ts         # expanded view: player + text + actions
-    reel-preview.ts         # animated thumbnail (IntersectionObserver)
-    reel-player.ts          # hls.js / native player, codec fallback
-    day-strip.ts            # P1
-    filter-chips.ts         # P1
+    view.ts                 # CardView: what the templates read from the card in one render
+    list.ts                 # templates: hour separators, rows, bursts, camera groups, empty states
+    detail.ts               # template: expanded view: player + text + actions
+    toolbar.ts              # templates: day navigation, warnings, filter chips, strip, legend
+    preview.ts              # <event-reel-preview>: animated thumbnail (IntersectionObserver)
+    player.ts               # <event-reel-player>: hls.js / native player, codec fallback
+    strip.ts                # <event-reel-strip>: the day strip
   i18n/ en.ts nb.ts index.ts
-  styles.ts
+  styles.ts                 # the card's styles, which the ui/ templates use too
 dev/
   index.html, mock-hass.ts  # dev harness (§7)
-  fixtures/*.example.json   # anonymised; *.local.json is gitignored
+  fixtures/example.ts       # generated example data; *.local.json is gitignored
 test/
   *.test.ts
 build/
   third-party-notices.ts    # license banner of the built file (§3.1)
   licenses/                 # LICENSE files of the packages hls.js inlines
 ```
+
+The templates in `ui/list.ts`, `ui/detail.ts` and `ui/toolbar.ts` are plain functions, not
+custom elements, so they render into the card's shadow root: the card's styles apply, and
+its row lookups, focus handling and arrow-key navigation reach them. They read a `CardView`
+(`ui/view.ts`) that the card builds once per render and call its actions. They keep no
+state of their own; the toolbar only records the camera names it lists in the card's map.
+They were split out of `event-reel-card.ts` on 2026-10-28 with no change in the rendered
+DOM other than whitespace between tags (checked in the dev harness across 29 states).
 
 ### 3.3 Data model
 

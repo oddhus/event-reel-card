@@ -1,48 +1,26 @@
 import { LitElement, html, nothing } from "lit";
-import type { TemplateResult } from "lit";
-import { live } from "lit/directives/live.js";
-import { repeat } from "lit/directives/repeat.js";
 import { normalizeConfig } from "./config";
 import type { CardConfig, NormalizedConfig } from "./config";
 import { buildCameraRegistry, frigateSignature } from "./core/cameras";
 import type { CameraRegistry } from "./core/cameras";
-import { detectCapabilities, hasSource, providerStatus } from "./core/capabilities";
+import { detectCapabilities, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
-import { CATEGORY_COLORS, iconFor } from "./core/categories";
 import { findEvent, parseReelParam } from "./core/deeplink";
-import { cameraOptions, capList, itemEvents, summarize, visibleRows } from "./core/filters";
+import { itemEvents, visibleRows } from "./core/filters";
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
-import type { BurstSegment, TimelineItem } from "./core/grouping";
+import type { TimelineItem } from "./core/grouping";
 import { Loader } from "./core/loader";
 import { MediaResolver } from "./core/media";
-import { AI_PROVIDERS, mergeEvents } from "./core/merge";
-import { nearestItem, stripModel, timeAt } from "./core/strip";
-import {
-  bandAt,
-  bandCounts,
-  contextBands,
-  historyTransitions,
-  inAnyBand,
-  mergeTransitions,
-} from "./core/context";
+import { mergeEvents } from "./core/merge";
+import { nearestItem, timeAt } from "./core/strip";
+import { contextBands, historyTransitions, inAnyBand, mergeTransitions } from "./core/context";
 import type { ContextBand, Transition } from "./core/context";
-import { highestThreat, withFlagged } from "./core/threat";
-import {
-  browserTimeZone,
-  computeRange,
-  dayKey,
-  dayRange,
-  formatDay,
-  formatDuration,
-  formatTime,
-  hourStart,
-  shiftDay,
-} from "./core/time";
+import { browserTimeZone, computeRange, dayKey, dayRange, shiftDay } from "./core/time";
 import type { TimeFormatOptions } from "./core/time";
 import type { Category } from "./types";
 import type { HomeAssistant } from "./ha-types";
-import { getLocalize, objectLabel, resolveLanguage } from "./i18n";
+import { getLocalize, resolveLanguage } from "./i18n";
 import { createEntityProvider, latestEntityChangeBefore } from "./providers/entity";
 import { createEventReelProvider, latestEventReelBefore } from "./providers/eventreel";
 import { frigateProvider, latestReviewBefore, markReviewed } from "./providers/frigate";
@@ -53,6 +31,15 @@ import {
 } from "./providers/llmvision";
 import { styles } from "./styles";
 import type { Localize, Provider, ProviderContext, ReelEvent, TimeRange } from "./types";
+import { cappedNote, renderEmpty, renderList } from "./ui/list";
+import {
+  renderDayNav,
+  renderLegend,
+  renderStrip,
+  renderToolbar,
+  renderWarnings,
+} from "./ui/toolbar";
+import type { CardView } from "./ui/view";
 import "./editor";
 import "./ui/player";
 import "./ui/preview";
@@ -64,12 +51,6 @@ type ProviderType = "entity" | "llmvision" | "event_reel" | "frigate";
 
 /** Overridable clock (epoch seconds), for the dev harness. */
 export const clock = { now: () => Date.now() / 1000 };
-
-/** Id of an event's detail region (ids live in the card's shadow root). */
-const detailId = (id: string) => `detail-${id.replace(/[^A-Za-z0-9_-]/g, "_")}`;
-
-const hasMedia = (e: ReelEvent) =>
-  !!(e.camera || e.cameraLabel || e.preview?.length || e.thumbnail?.length || e.clip);
 
 /** The options that change what is fetched; everything else only needs a recompute. */
 const dataKey = (c: NormalizedConfig) =>
@@ -86,9 +67,6 @@ const dataKey = (c: NormalizedConfig) =>
     c.language,
     c.context,
   ]);
-
-/** The README's configuration section, linked from the empty state when no source is set up. */
-const SETUP_URL = "https://github.com/oddhus/event-reel-card#configuration";
 
 /** Seconds before a provider that hasn't answered is shown as unavailable. */
 const FETCH_TIMEOUT = 20;
@@ -708,6 +686,18 @@ export class EventReelCard extends LitElement {
     if (!active || active.disabled) root.querySelector<HTMLElement>(".navbtn.prev")?.focus();
   }
 
+  /** The ‹ button. It reads the date when clicked: the row may be from before midnight. */
+  private _previousDay() {
+    void this._navTo(shiftDay(this._day ?? dayKey(clock.now(), this._tz()), -1));
+  }
+
+  /** The › button, back to the live range after yesterday. Like ‹, it reads the date now. */
+  private _nextDay() {
+    if (!this._day) return;
+    const next = shiftDay(this._day, 1);
+    void this._navTo(next < dayKey(clock.now(), this._tz()) ? next : undefined);
+  }
+
   private _recompute() {
     if (!this._config || !this._range || this._waiting) return;
     const byId = new Map<string, ReelEvent>();
@@ -1014,10 +1004,6 @@ export class EventReelCard extends LitElement {
 
   // ----- rendering -----
 
-  private _time(epoch: number) {
-    return formatTime(epoch, this._timeOpts());
-  }
-
   private _cameraName(e: ReelEvent): string | undefined {
     if (e.camera) {
       return (
@@ -1030,568 +1016,43 @@ export class EventReelCard extends LitElement {
     return e.cameraLabel;
   }
 
-  private _metaParts(e: ReelEvent): string[] {
-    const t = this._localize;
-    const parts: string[] = [];
-    const cam = this._cameraName(e);
-    if (cam) parts.push(cam);
-    if (e.end !== undefined && e.end > e.start && (e.camera || e.frigate)) {
-      parts.push(formatDuration(e.end - e.start, t));
-    } else if (e.frigate && e.end === undefined) {
-      parts.push(t("meta.ongoing"));
-    }
-    if (e.people?.length) parts.push(e.people.join(", "));
-    if (e.actor) parts.push(t("meta.by", { actor: e.actor }));
-    return parts;
-  }
-
-  private _media(e: ReelEvent, icon: string) {
-    if (!hasMedia(e) || this._config?.preview === "off") {
-      return html`<span class="slot"
-        ><span class="disc" style="--c:${CATEGORY_COLORS[e.category]}"
-          ><ha-icon .icon=${icon}></ha-icon></span
-      ></span>`;
-    }
-    return html`<span class="slot"
-      ><event-reel-preview
-        class="thumb"
-        .resolver=${this._resolver}
-        .thumbnail=${e.thumbnail}
-        .preview=${e.preview}
-        .mode=${this._config?.preview ?? "visible"}
-        .icon=${icon}
-      ></event-reel-preview
-    ></span>`;
-  }
-
-  private _eventRow(
-    e: ReelEvent,
-    opts: {
-      time?: number;
-      badge?: string;
-      meta?: string[];
-      groupId?: string;
-      threat?: 1 | 2;
-      /** Start times of a group's events, for its band edge. */
-      times?: number[];
-    } = {},
-  ) {
-    const t = this._localize;
-    const open = !opts.groupId && this._openId === e.id;
-    const icon = iconFor(e);
-    const threat = opts.threat ?? e.threat;
-    // Before the title on wide rows, at the start of the camera/duration line on narrow ones
-    // (CSS), so the title stays readable.
-    const threatBadge = threat
-      ? html`<span class="badge threat-${threat}">${t(`threat.${threat}`)}</span>`
-      : nothing;
-    const meta = (opts.meta ?? this._metaParts(e)).join(" · ");
-    const comfortable = this._config?.density === "comfortable";
-    const onClick = opts.groupId
-      ? () => this._toggleGroup(opts.groupId!)
-      : () => this._toggle(e.id);
-    const expanded = opts.groupId ? this._openGroups.has(opts.groupId) : open;
-    const band = this._bandMark(opts.times ?? [e.start]);
-    return html`
-      <button
-        class="row ${hasMedia(e) ? "camera" : "plain"} ${this._highlight === e.id && !opts.groupId ? "hl" : ""} ${band.cls}"
-        style=${band.style}
-        data-id=${opts.groupId ?? e.id}
-        aria-expanded=${expanded ? "true" : "false"}
-        aria-controls=${open ? detailId(e.id) : nothing}
-        @click=${onClick}
-      >
-        <span class="time">${this._time(opts.time ?? e.start)}</span>
-        ${this._media(e, icon)}
-        <span class="main">
-          <span class="title"
-            >${opts.badge ? html`<span class="badge">${opts.badge}</span>` : nothing}${threatBadge}${e.title}${
-              e.stateLabel
-                ? html`<span class="state">${e.title ? " · " : ""}${e.stateLabel}</span>`
-                : nothing
-            }</span
-          >
-          ${comfortable && e.description ? html`<span class="desc">${e.description}</span>` : nothing}
-          ${meta || threat ? html`<span class="sub">${threatBadge}${meta}</span>` : nothing}
-          ${band.text}
-        </span>
-        <span class="meta">${meta}</span>
-        ${
-          e.frigate && e.reviewed === false
-            ? html`<span
-                class="dot"
-                role="img"
-                title=${t("meta.unreviewed")}
-                aria-label=${t("meta.unreviewed")}
-              ></span>`
-            : html`<span class="dot-space"></span>`
-        }
-      </button>
-      ${open ? this._detail(e) : nothing}
-    `;
-  }
-
-  private _detail(e: ReelEvent) {
-    const t = this._localize;
-    const player = e.frigate || e.clip;
-    const override = e.camera ? this._config?.cameras[e.camera]?.clip : undefined;
-    const labels = (e.labels ?? []).map((l) => objectLabel(t, l));
-    // "AI + Frigate" when AI text was joined to another provider's media.
-    const media = e.sources.filter((s) => !AI_PROVIDERS.includes(s));
-    const fromAi = media.length < e.sources.length;
-    const chips = [
-      ...labels,
-      ...(fromAi && media.length
-        ? [`${t("sources.ai")} + ${media.map((s) => t(`provider.${s}`)).join(" + ")}`]
-        : []),
-    ];
-    return html`
-      <div class="detail" id=${detailId(e.id)}>
-        ${
-          player
-            ? html`<event-reel-player
-                .resolver=${this._resolver}
-                .localize=${t}
-                .now=${clock.now}
-                .event=${e}
-                .padding=${this._config?.frigate.clip_padding ?? [10, 20]}
-                .clipMode=${override ?? "auto"}
-              ></event-reel-player>`
-            : e.thumbnail?.length
-              ? html`<event-reel-preview
-                  class="still"
-                  .resolver=${this._resolver}
-                  .thumbnail=${e.thumbnail}
-                  mode="still"
-                ></event-reel-preview>`
-              : nothing
-        }
-        ${e.description && e.description !== e.title ? html`<p class="desc">${e.description}</p>` : nothing}
-        ${
-          e.extra?.length
-            ? html`<div class="extra">
-                <div class="label">${t("detail.more_ai")}</div>
-                ${e.extra.map(
-                  (x) =>
-                    html`<p>
-                      <span class="time">${this._time(x.start)}</span> <strong>${x.title}</strong>${
-                        x.description ? html` – ${x.description}` : nothing
-                      }
-                    </p>`,
-                )}
-              </div>`
-            : nothing
-        }
-        ${
-          e.concerns?.length
-            ? html`<div class="chips concerns">
-                <span class="label">${t("detail.concerns")}:</span>
-                ${e.concerns.map((c) => html`<span class="chip">${c}</span>`)}
-              </div>`
-            : nothing
-        }
-        ${chips.length ? html`<div class="chips">${chips.map((c) => html`<span class="chip">${c}</span>`)}</div>` : nothing}
-        <div class="actions">
-          ${
-            e.camera
-              ? html`<button @click=${() => this._moreInfo(e.camera!)}>
-                  ${t("detail.open_camera")}
-                </button>`
-              : e.entityId
-                ? html`<button @click=${() => this._moreInfo(e.entityId!)}>
-                    ${t("detail.open_entity")}
-                  </button>`
-                : nothing
-          }
-          ${
-            e.frigate && e.reviewed === false
-              ? html`<button @click=${() => this._markReviewed([e])}>
-                  ${t("action.mark_reviewed")}
-                </button>`
-              : nothing
-          }
-          <span class="spacer"></span>
-          <button @click=${() => this._toggle(e.id)}>${t("detail.close")}</button>
-        </div>
-      </div>
-    `;
-  }
-
-  private _segmentsText(segments: BurstSegment[]): string {
-    return segments
-      .map(
-        (s) =>
-          (s.name ? `${s.name}: ` : "") +
-          s.steps.map((st) => (st.count > 1 ? `${st.label} ×${st.count}` : st.label)).join(" · "),
-      )
-      .join("; ");
-  }
-
-  private _item(item: TimelineItem): TemplateResult {
-    const t = this._localize;
-    if (item.kind === "event") {
-      return html`<div
-        class="item ${this._highlight === item.id ? "highlight" : ""}"
-        role="listitem"
-      >
-        ${this._eventRow(item.event)}
-      </div>`;
-    }
-
-    if (item.kind === "burst") {
-      const first = item.events[0];
-      const last = item.events[item.events.length - 1];
-      const open = this._openGroups.has(item.id);
-      const icon = iconFor(last);
-      const burstBand = this._bandMark(item.events.map((x) => x.start));
-      return html`<div
-        class="item ${this._highlight === item.id ? "highlight" : ""}"
-        role="listitem"
-      >
-        <button
-          class="row plain ${burstBand.cls}"
-          style=${burstBand.style}
-          data-id=${item.id}
-          aria-expanded=${open ? "true" : "false"}
-          @click=${() => this._toggleGroup(item.id)}
-        >
-          <span class="time">${this._time(item.sortTime)}</span>
-          <span class="slot"
-            ><span class="disc" style="--c:${CATEGORY_COLORS[first.category]}"
-              ><ha-icon .icon=${icon}></ha-icon></span
-          ></span>
-          <span class="main">
-            <span class="title">${this._segmentsText(item.segments)}</span>
-            <span class="sub">${this._time(item.start)}–${this._time(item.end)}</span>
-            ${burstBand.text}
-          </span>
-          <span class="meta">${this._time(item.start)}–${this._time(item.end)}</span>
-          <span class="dot-space"></span>
-        </button>
-        ${
-          open
-            ? html`<div class="steps">
-                ${item.events.map(
-                  (e) =>
-                    html`<div class="step ${e.id === this._linkedEvent ? "highlight" : ""}">
-                      <span class="time">${formatTime(e.start, this._timeOpts())}</span>
-                      <ha-icon .icon=${iconFor(e)}></ha-icon>
-                      <span>${e.title}${e.stateLabel ? ` · ${e.stateLabel}` : ""}</span>
-                      ${e.actor ? html`<span class="muted">${t("meta.by", { actor: e.actor })}</span>` : nothing}
-                    </div>`,
-                )}
-              </div>`
-            : nothing
-        }
-      </div>`;
-    }
-
-    // Camera group: the newest event stands for the group.
-    const newest = item.events[item.events.length - 1];
-    const open = this._openGroups.has(item.id);
-    const cam = this._cameraName(newest);
-    const meta = [cam, `${this._time(item.start)}–${this._time(item.end)}`].filter(
-      Boolean,
-    ) as string[];
-    return html`<div
-      class="item group ${this._highlight === item.id ? "highlight" : ""}"
-      role="listitem"
-    >
-      ${this._eventRow(newest, {
-        time: item.sortTime,
-        badge: t("group.count", { count: item.events.length }),
-        threat: highestThreat(item.events),
-        times: item.events.map((x) => x.start),
-        meta,
-        groupId: item.id,
-      })}
-      ${open ? this._groupChildren(item.events) : nothing}
-    </div>`;
-  }
-
-  /**
-   * An open camera group's events, newest first, capped like the list. The cap never hides
-   * an event with a threat level, since the group row shows the highest one.
-   */
-  private _groupChildren(events: ReelEvent[]) {
-    const newestFirst = [...events].reverse();
-    const children = withFlagged(
-      newestFirst,
-      capList(
-        newestFirst,
-        this._config!.maxEvents,
-        () => 1,
-        (e) => this._isReached(e),
-      ),
-    );
-    return html`<div class="children">
-      ${repeat(
-        // Keyed, so an open clip keeps playing when a newer event joins the group.
-        children.list,
-        (e) => e.id,
-        (e) => html`<div class="child">${this._eventRow(e)}</div>`,
-      )}
-      ${children.hidden ? this._cappedNote(children.hidden) : nothing}
-    </div>`;
-  }
-
-  private _cappedNote(hidden: number) {
-    return html`<p class="capped" role="note">
-      ${this._localize("list.capped", { count: hidden, max: this._config!.maxEvents })}
-    </p>`;
-  }
-
-  private _renderList(items: TimelineItem[]) {
-    const tz = this._tz();
-    const opts = this._timeOpts();
-    // Label days other than the one in view (today, or the day shown).
-    const today = this._day ?? dayKey(clock.now(), tz);
-    const entries: { key: string; tpl: TemplateResult }[] = [];
-    let lastHour: number | undefined;
-    let lastDay: string | undefined;
-    for (const item of items) {
-      const hour = hourStart(item.sortTime, tz);
-      if (hour !== lastHour) {
-        const day = dayKey(item.sortTime, tz);
-        const showDay = day !== lastDay && (lastDay !== undefined || day !== today);
-        entries.push({
-          key: `sep:${hour}`,
-          tpl: html`<div class="sep" role="presentation">
-            ${showDay ? html`<span class="day">${formatDay(item.sortTime, opts)}</span>` : nothing}
-            <span>${formatTime(hour, opts)}</span>
-          </div>`,
-        });
-        lastHour = hour;
-        lastDay = day;
-      }
-      entries.push({ key: item.id, tpl: this._item(item) });
-    }
-    return repeat(
-      entries,
-      (e) => e.key,
-      (e) => e.tpl,
-    );
-  }
-
-  private _warnings() {
-    const t = this._localize;
-    if (!this._errors.size) return nothing;
-    return html`<div class="warnings" role="status">
-      ${[...this._errors].map(
-        ([type, kind]) =>
-          html`<span class="warning"
-            ><ha-icon icon="mdi:alert-circle-outline"></ha-icon>${t(
-              kind === "missing" ? "warning.missing" : "warning.unavailable",
-              { provider: t(`provider.${type}`) },
-            )}</span
-          >`,
-      )}
-    </div>`;
-  }
-
-  private _toolbar(items: TimelineItem[], filtered: TimelineItem[]) {
-    const t = this._localize;
-    const cfg = this._config!;
-    const unreviewed = filtered
-      .flatMap(itemEvents)
-      .filter((e) => e.frigate?.reviewId && e.reviewed === false);
-    const active = this._filter.categories;
-    const counts = cfg.filters ? summarize(items) : [];
-    // An active chip stays visible (at 0) so it can be switched off.
-    for (const c of active) {
-      if (!counts.some((x) => x.category === c)) counts.push({ category: c, count: 0 });
-    }
-    const cams = cfg.filters ? cameraOptions(items, (key, e) => this._cameraName(e) ?? key) : [];
-    const camera = this._filter.camera;
-    if (camera && !cams.some((o) => o.key === camera)) {
-      cams.push({ key: camera, name: this._cameraNames.get(camera) ?? camera, count: 0 });
-    }
-    for (const o of cams) this._cameraNames.set(o.key, o.name);
-    const showCams = cams.length > 1 || !!camera;
-    const picked = this._filter.bands ?? new Set<string>();
-    const bandCount = bandCounts(items, this._bands);
-    // A band shows when it falls in the view, also with no rows (its color still needs a
-    // name), or when it is picked, so it can be switched off.
-    const bandChips = cfg.filters
-      ? this._bands.filter((b) => b.intervals.length || picked.has(b.key))
-      : [];
-    if (!counts.length && !showCams && !unreviewed.length && !bandChips.length) return nothing;
-    const markLabel = t("action.mark_all_reviewed_n", { count: unreviewed.length });
-    return html`<div class="toolbar">
-      <div class="chipbar" role="group" aria-label=${t("filter.label")}>
-        ${bandChips.map(
-          (b) =>
-            html`<button
-              class="fchip bandchip"
-              aria-pressed=${picked.has(b.key) ? "true" : "false"}
-              title=${t("filter.band", { label: b.label })}
-              style="--c:${b.color}"
-              @click=${() => this._toggleBand(b.key)}
-            >
-              <span class="swatch"></span>
-              <span>${b.label}</span>
-              <span class="n">${bandCount.get(b.key) ?? 0}</span>
-            </button>`,
-        )}
-        ${counts.map(
-          (c) =>
-            html`<button
-              class="fchip"
-              aria-pressed=${active.has(c.category) ? "true" : "false"}
-              style="--c:${CATEGORY_COLORS[c.category]}"
-              @click=${() => this._toggleCategory(c.category)}
-            >
-              <ha-icon .icon=${iconFor({ category: c.category })}></ha-icon>
-              <span>${t(`category.${c.category}`)}</span>
-              <span class="n">${c.count}</span>
-            </button>`,
-        )}
-      </div>
-      ${
-        showCams
-          ? html`<select
-              class="camsel"
-              aria-label=${t("filter.camera")}
-              .value=${live(camera ?? "")}
-              @change=${(ev: Event) => this._setCamera((ev.target as HTMLSelectElement).value)}
-            >
-              <option value="">${t("filter.all_cameras")}</option>
-              ${cams.map((o) => html`<option value=${o.key}>${o.name} (${o.count})</option>`)}
-            </select>`
-          : nothing
-      }
-      ${
-        unreviewed.length
-          ? html`<button
-              class="markall"
-              title=${markLabel}
-              aria-label=${markLabel}
-              @click=${() => this._markReviewed(unreviewed)}
-            >
-              <ha-icon icon="mdi:check-all"></ha-icon><span class="n">${unreviewed.length}</span>
-            </button>`
-          : nothing
-      }
-    </div>`;
-  }
-
-  private _strip(filtered: TimelineItem[]) {
-    if (!this._config?.dayStrip || !this._range || !this._loaded) return nothing;
-    const model = stripModel(filtered, this._viewRange()!, this._tz(), 6, this._bands);
-    const opts = this._timeOpts();
-    return html`<event-reel-strip
-      .model=${model}
-      .labels=${model.marks.map((m) => formatTime(m.epoch, opts))}
-      .selected=${this._highlight}
-      .cursor=${this._stripCursor}
-      .label=${this._localize("strip.label")}
-      .valueText=${this._stripValueText(filtered)}
-      .live=${!this._day}
-      @strip-select=${(ev: CustomEvent<{ position: number; id?: string }>) =>
-        this._onStripSelect(ev, filtered)}
-    ></event-reel-strip>`;
-  }
-
-  /** Without the filter chips, which name the bands, a legend says what the colors mean. */
-  private _legend() {
-    if (this._config?.filters) return nothing;
-    const bands = this._bands.filter((b) => b.intervals.length);
-    if (!bands.length) return nothing;
-    return html`<div class="legend">
-      ${bands.map(
-        (b) => html`<span style="--c:${b.color}"><span class="swatch"></span>${b.label}</span>`,
-      )}
-    </div>`;
-  }
-
-  private _stripValueText(items: TimelineItem[]): string {
-    const id = this._stripCursor ?? this._highlight;
-    const item = items.find((i) => i.id === id);
-    if (!item) return "";
-    const e = itemEvents(item)[itemEvents(item).length - 1];
-    return `${this._time(item.sortTime)} ${e.title}${e.stateLabel ? ` ${e.stateLabel}` : ""}`;
-  }
-
-  private _empty() {
-    const t = this._localize;
-    if (this._caps && !hasSource(this._config!, this._caps)) {
-      return html`<div class="empty" role="status">
-        <div>${t("empty.setup")}</div>
-        <div class="muted">
-          ${t("empty.setup_hint")}
-          <a href=${SETUP_URL} target="_blank" rel="noopener">${t("empty.setup_link")}</a>
-        </div>
-      </div>`;
-    }
-    const range = this._config!.range;
-    const text = this._day
-      ? this._day === shiftDay(dayKey(clock.now(), this._tz()), -1)
-        ? t("empty.yesterday")
-        : t("empty.day")
-      : range.kind === "today"
-        ? t("empty.today")
-        : t("empty.rolling", { hours: range.hours });
-    const last = this._lastEarlier;
-    const opts = this._timeOpts();
-    return html`<div class="empty" role="status">
-      <div>${text}</div>
-      ${
-        last
-          ? html`<div class="muted">
-              ${t("empty.last", { when: `${formatDay(last, opts)} ${formatTime(last, opts)}` })}
-            </div>`
-          : nothing
-      }
-    </div>`;
-  }
-
-  private _dayNav() {
-    if (!this._config?.dayNavigation) return nothing;
-    const t = this._localize;
-    const tz = this._tz();
-    const today = dayKey(clock.now(), tz);
-    const day = this._day;
-    const range = this._config.range;
-    const label = !day
-      ? range.kind === "today"
-        ? t("nav.today")
-        : t("nav.last_hours", { hours: range.hours })
-      : day === shiftDay(today, -1)
-        ? t("nav.yesterday")
-        : formatDay(dayRange(day, tz).start, this._timeOpts());
-    // The handlers read the date when clicked: the row may have been drawn before midnight.
-    const now = () => dayKey(clock.now(), this._tz());
-    return html`<div class="daynav" role="group" aria-label=${t("nav.label")}>
-      <span class="daylabel" aria-live="polite">${label}</span>
-      ${
-        day
-          ? html`<button class="linkish today" @click=${() => this._navTo(undefined)}>
-              ${t("nav.today")}
-            </button>`
-          : nothing
-      }
-      <button
-        class="navbtn prev"
-        title=${t("nav.previous_day")}
-        aria-label=${t("nav.previous_day")}
-        @click=${() => this._navTo(shiftDay(this._day ?? now(), -1))}
-      >
-        <ha-icon icon="mdi:chevron-left"></ha-icon>
-      </button>
-      <button
-        class="navbtn"
-        title=${t("nav.next_day")}
-        aria-label=${t("nav.next_day")}
-        ?disabled=${!day}
-        @click=${() => {
-          if (!this._day) return;
-          const next = shiftDay(this._day, 1);
-          void this._navTo(next < now() ? next : undefined);
-        }}
-      >
-        <ha-icon icon="mdi:chevron-right"></ha-icon>
-      </button>
-    </div>`;
+  /** What the templates in `ui/` read for one render, and the actions their controls call. */
+  private _view(): CardView {
+    return {
+      t: this._localize,
+      config: this._config!,
+      resolver: this._resolver,
+      timeOpts: this._timeOpts(),
+      tz: this._tz(),
+      now: clock.now,
+      day: this._day,
+      loaded: this._loaded,
+      caps: this._caps,
+      errors: this._errors,
+      lastEarlier: this._lastEarlier,
+      bands: this._bands,
+      filter: this._filter,
+      cameraNames: this._cameraNames,
+      openId: this._openId,
+      openGroups: this._openGroups,
+      highlight: this._highlight,
+      stripCursor: this._stripCursor,
+      linkedEvent: this._linkedEvent,
+      viewRange: () => this._viewRange(),
+      cameraName: (e) => this._cameraName(e),
+      isReached: (e) => this._isReached(e),
+      toggle: (id) => this._toggle(id),
+      toggleGroup: (id) => this._toggleGroup(id),
+      toggleCategory: (c) => this._toggleCategory(c),
+      toggleBand: (key) => this._toggleBand(key),
+      setCamera: (key) => this._setCamera(key),
+      markReviewed: (events) => void this._markReviewed(events),
+      moreInfo: (entityId) => this._moreInfo(entityId),
+      stripSelect: (ev, items) => this._onStripSelect(ev, items),
+      navTo: (day) => void this._navTo(day),
+      previousDay: () => this._previousDay(),
+      nextDay: () => this._nextDay(),
+    };
   }
 
   /**
@@ -1619,18 +1080,6 @@ export class EventReelCard extends LitElement {
     );
   }
 
-  /** A row's band edge and its text for screen readers, by the time the row shows. */
-  private _bandMark(times: number[]) {
-    const band = bandAt(this._bands, times);
-    return band
-      ? {
-          cls: "inband",
-          style: `--band:${band.color}`,
-          text: html`<span class="sr-only"> · ${band.label}</span>`,
-        }
-      : { cls: "", style: "", text: nothing };
-  }
-
   private _toggleBand(key: string) {
     const bands = new Set(this._filter.bands);
     if (bands.has(key)) bands.delete(key);
@@ -1642,6 +1091,7 @@ export class EventReelCard extends LitElement {
     if (!this._config) return nothing;
     const t = this._localize;
     this._bands = this._computeBands();
+    const view = this._view();
     // A picked band the config no longer has is ignored, so it can't hide every row.
     const picked = this._bands.filter((b) => this._filter.bands?.has(b.key));
     const inBand = picked.length ? inAnyBand(picked) : undefined;
@@ -1658,7 +1108,7 @@ export class EventReelCard extends LitElement {
       this._loaded && (this._items.length > 0 || this._bands.some((b) => b.intervals.length));
     return html`
       <ha-card .header=${this._config.title || undefined}>
-        ${this._dayNav()} ${this._warnings()}
+        ${renderDayNav(view)} ${renderWarnings(view)}
         ${
           this._notice
             ? html`<div class="notice" role="status">
@@ -1676,7 +1126,8 @@ export class EventReelCard extends LitElement {
         ${
           showBar
             ? html`<div class="sticky">
-                ${this._toolbar(this._items, filtered)} ${this._strip(filtered)} ${this._legend()}
+                ${renderToolbar(view, this._items, filtered)} ${renderStrip(view, filtered)}
+                ${renderLegend(view)}
               </div>`
             : nothing
         }
@@ -1689,9 +1140,9 @@ export class EventReelCard extends LitElement {
                     role="list"
                     @keydown=${(ev: KeyboardEvent) => this._onKeyDown(ev)}
                   >
-                    ${this._renderList(filtered)}
+                    ${renderList(view, filtered)}
                   </div>
-                  ${shown.hidden ? this._cappedNote(shown.hidden) : nothing}`
+                  ${shown.hidden ? cappedNote(view, shown.hidden) : nothing}`
               : this._items.length
                 ? html`<div class="empty">
                     <button
@@ -1701,7 +1152,7 @@ export class EventReelCard extends LitElement {
                       ${t("filter.clear")}
                     </button>
                   </div>`
-                : this._empty()
+                : renderEmpty(view)
         }
       </ha-card>
     `;
