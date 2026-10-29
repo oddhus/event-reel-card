@@ -6,6 +6,7 @@ import {
   homeAt,
   homeDuring,
   initialsFor,
+  pastDayTakesLive,
   presenceEntities,
   whileNobodyHome,
 } from "../src/core/presence";
@@ -217,6 +218,21 @@ describe("who was home", () => {
     expect(whileNobodyHome(q, ev({ start: range.end - 20 * M }))).toBe(true);
   });
 
+  it("leaves out an entity that doesn't exist, even with recorded history", () => {
+    // Sam was removed; the recorder still has a state from noon.
+    const removed = new Map([
+      ["person.alex", [tr("not_home", T0 - 600)]],
+      ["person.sam", [tr("not_home", T0 + 12 * H)]],
+    ]);
+    const listed = [
+      { ...people[0], listed: true },
+      { ...people[1], listed: true, exists: false },
+    ];
+    const q = computePresence(listed, removed, range, after);
+    expect(names(q.people)).toEqual(["Alex"]);
+    expect(whileNobodyHome(q, ev({ start: T0 + 6 * H }))).toBe(true);
+  });
+
   it("flags nothing without anyone to watch", () => {
     const q = computePresence(people, new Map(), range, after);
     expect(q.people).toEqual([]);
@@ -259,5 +275,20 @@ describe("presence in the editor", () => {
     const off = formToConfig({ ...configToForm(yaml), presence: false }, yaml, yaml);
     const on = formToConfig({ ...configToForm(off), presence: true }, off, yaml);
     expect(on.presence).toEqual(yaml.presence);
+  });
+});
+
+describe("live changes on a past day", () => {
+  const dayEnd = T0 + 24 * H;
+
+  it("takes them until ten minutes past the day's end, with presence", () => {
+    expect(pastDayTakesLive(dayEnd, dayEnd + 2 * M, true)).toBe(true);
+    expect(pastDayTakesLive(dayEnd, dayEnd + 9 * M, true)).toBe(true);
+    expect(pastDayTakesLive(dayEnd, dayEnd + 10 * M, true)).toBe(false);
+    expect(pastDayTakesLive(dayEnd, dayEnd + 3 * H, true)).toBe(false);
+  });
+
+  it("never takes them without presence", () => {
+    expect(pastDayTakesLive(dayEnd, dayEnd + 2 * M, false)).toBe(false);
   });
 });

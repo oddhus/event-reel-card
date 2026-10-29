@@ -896,8 +896,9 @@ can already shade "away mode", but not say who, and a template can't read past s
   person's first known state they are not counted as home but also stop the house from
   counting as empty. A person with no known state over the whole window is left out with
   `presence: true` (a person entity without a tracker would otherwise block the flag
-  forever), and kept as "may be home" when listed by hand and present in `hass.states` (a
-  typo in a listed id would otherwise switch the flag off for good). "Nobody home" is the complement
+  forever), and kept as "may be home" when listed by hand. An id missing from `hass.states`
+  (a typo, a removed person) is left out whatever the recorder still has: it would switch
+  the flag off for good, or until its first recorded state. "Nobody home" is the complement
   of everyone's home intervals, shrunk by the grace at each end (phones report late, so the
   door on the way out or in isn't flagged), except where it starts at the fetched window's
   start or is still open at now. A presence event is never flagged (a tracked person's own

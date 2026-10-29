@@ -34,6 +34,14 @@ export interface Presence {
 /** The range history is fetched over: the grace before the range decides its first minutes. */
 export const presenceFetchStart = (range: TimeRange) => range.start - PRESENCE_GRACE;
 
+/**
+ * Whether a past day still takes live state changes at `now`: only with presence, until the
+ * grace after its end, since someone coming home at 00:05 decides whether the last minutes
+ * of yesterday were empty. Context bands end at the day's end and ignore later changes.
+ */
+export const pastDayTakesLive = (dayEnd: number, now: number, presence: boolean) =>
+  presence && now < dayEnd + PRESENCE_GRACE;
+
 /** The people to watch: the configured ones, or every `person` entity for `presence: true`. */
 export function presenceEntities(config: NormalizedPresence, stateIds: string[]): string[] {
   if (config.people.length) return config.people.map((p) => p.entity);
@@ -83,10 +91,11 @@ export function initialsFor(names: string[]): string[] {
  * are bridged (as for context bands), so a phone that drops off the network for a moment
  * doesn't empty the house; a short visit home still counts. A person without any known
  * state is left out, unless `listed`: then they may be home all along, and the house is
- * never counted as empty.
+ * never counted as empty. An entity that doesn't exist (`exists: false`, a typo or a removed
+ * person) is left out whatever its history says.
  */
 export function computePresence(
-  people: { entity: string; name: string; listed?: boolean }[],
+  people: { entity: string; name: string; listed?: boolean; exists?: boolean }[],
   transitions: Map<string, Transition[]>,
   range: TimeRange,
   now: number,
@@ -95,7 +104,9 @@ export function computePresence(
   const ext = { start: presenceFetchStart(range), end: range.end + PRESENCE_GRACE };
   const end = Math.min(ext.end, now);
   const known = people.filter(
-    (p) => p.listed || (transitions.get(p.entity) ?? []).some((t) => !INVALID.has(t.state)),
+    (p) =>
+      p.exists !== false &&
+      (p.listed || (transitions.get(p.entity) ?? []).some((t) => !INVALID.has(t.state))),
   );
   const initials = initialsFor(known.map((p) => p.name));
   const home = new Map<string, Interval[]>();
