@@ -8,6 +8,7 @@ import { hasSource } from "../core/capabilities";
 import { CATEGORY_COLORS, iconFor } from "../core/categories";
 import { bandAt } from "../core/context";
 import { capList } from "../core/filters";
+import { homeDuring, whileNobodyHome } from "../core/presence";
 import type { BurstSegment, TimelineItem } from "../core/grouping";
 import { highestThreat, withFlagged } from "../core/threat";
 import { dayKey, formatDay, formatDuration, formatTime, hourStart, shiftDay } from "../core/time";
@@ -68,6 +69,49 @@ function bandMark(view: CardView, times: number[]) {
     : { cls: "", style: "", text: nothing };
 }
 
+/** Initials shown on a row before the rest become a count. */
+const MAX_INITIALS = 3;
+
+/**
+ * Who was home at a row's events (§5.10), in a column before the dot: their initials, or a
+ * house with a cross when one of the events happened while nobody was. A group can show
+ * both: someone came home during it.
+ */
+function presenceCell(view: CardView, events: ReelEvent[]) {
+  const p = view.presence;
+  if (!p) return nothing;
+  const t = view.t;
+  const people = homeDuring(p, events);
+  const empty = events.some((e) => whileNobodyHome(p, e));
+  const label = t("presence.home", { names: people.map((x) => x.name).join(", ") });
+  const nobody = t("presence.nobody_home");
+  // At most three chips, so a phone-width row keeps its title: with more people, two
+  // initials and a count. The label names everyone.
+  const shown = people.length > MAX_INITIALS ? people.slice(0, MAX_INITIALS - 1) : people;
+  const more = people.length - shown.length;
+  return html`<span class="home"
+    >${
+      empty
+        ? html`<ha-icon
+            class="nobody"
+            role="img"
+            title=${nobody}
+            aria-label=${nobody}
+            .icon=${"mdi:home-off-outline"}
+          ></ha-icon>`
+        : nothing
+    }${
+      people.length
+        ? html`<span class="who" role="img" title=${label} aria-label=${label}
+            >${shown.map((x) => html`<span class="initial">${x.initials}</span>`)}${
+              more ? html`<span class="initial more">+${more}</span>` : nothing
+            }</span
+          >`
+        : nothing
+    }</span
+  >`;
+}
+
 function eventRow(
   view: CardView,
   e: ReelEvent,
@@ -79,6 +123,8 @@ function eventRow(
     threat?: 1 | 2;
     /** Start times of a group's events, for its band edge. */
     times?: number[];
+    /** A group's events, for who was home. */
+    events?: ReelEvent[];
   } = {},
 ) {
   const t = view.t;
@@ -97,7 +143,7 @@ function eventRow(
   const band = bandMark(view, opts.times ?? [e.start]);
   return html`
     <button
-      class="row ${hasMedia(e) ? "camera" : "plain"} ${view.highlight === e.id && !opts.groupId ? "hl" : ""} ${band.cls}"
+      class="row ${hasMedia(e) ? "camera" : "plain"} ${view.highlight === e.id && !opts.groupId ? "hl" : ""} ${band.cls} ${view.presence ? "presence" : ""}"
       style=${band.style}
       data-id=${opts.groupId ?? e.id}
       aria-expanded=${expanded ? "true" : "false"}
@@ -119,6 +165,7 @@ function eventRow(
         ${band.text}
       </span>
       <span class="meta">${meta}</span>
+      ${presenceCell(view, opts.events ?? [e])}
       ${
         e.frigate && e.reviewed === false
           ? html`<span
@@ -163,7 +210,7 @@ function renderItem(view: CardView, item: TimelineItem): TemplateResult {
     );
     return html`<div class="item ${view.highlight === item.id ? "highlight" : ""}" role="listitem">
       <button
-        class="row plain ${burstBand.cls}"
+        class="row plain ${burstBand.cls} ${view.presence ? "presence" : ""}"
         style=${burstBand.style}
         data-id=${item.id}
         aria-expanded=${open ? "true" : "false"}
@@ -180,6 +227,7 @@ function renderItem(view: CardView, item: TimelineItem): TemplateResult {
           ${burstBand.text}
         </span>
         <span class="meta">${time(view, item.start)}–${time(view, item.end)}</span>
+        ${presenceCell(view, item.events)}
         <span class="dot-space"></span>
       </button>
       ${
@@ -216,6 +264,7 @@ function renderItem(view: CardView, item: TimelineItem): TemplateResult {
       badge: t("group.count", { count: item.events.length }),
       threat: highestThreat(item.events),
       times: item.events.map((x) => x.start),
+      events: item.events,
       meta,
       groupId: item.id,
     })}

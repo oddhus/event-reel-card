@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The project uses
 
 ## Unreleased
 
+### Added
+
+- `presence`: each row shows the initials of the people who were home when it happened,
+  and a crossed-out house when nobody was. The first and last 10 minutes of an empty house,
+  and the people's own arrivals and departures, aren't flagged. Off by default; the visual
+  editor has a switch for it.
+
 ## [0.5.0] - 2026-10-23
 
 ### Added

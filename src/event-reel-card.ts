@@ -16,6 +16,13 @@ import { mergeEvents } from "./core/merge";
 import { nearestItem, timeAt } from "./core/strip";
 import { contextBands, historyTransitions, inAnyBand, mergeTransitions } from "./core/context";
 import type { ContextBand, Transition } from "./core/context";
+import {
+  PRESENCE_GRACE,
+  computePresence,
+  presenceEntities,
+  presenceFetchStart,
+} from "./core/presence";
+import type { Presence } from "./core/presence";
 import { browserTimeZone, computeRange, dayKey, dayRange, shiftDay } from "./core/time";
 import type { TimeFormatOptions } from "./core/time";
 import type { Category } from "./types";
@@ -66,6 +73,7 @@ const dataKey = (c: NormalizedConfig) =>
     c.refreshInterval,
     c.language,
     c.context,
+    c.presence,
   ]);
 
 /** Seconds before a provider that hasn't answered is shown as unavailable. */
@@ -166,6 +174,10 @@ export class EventReelCard extends LitElement {
   /** State changes of the context entities in view, oldest first (§5.6). */
   private _context = new Map<string, Transition[]>();
   private _contextToken = 0;
+  /** The entities of the last history fetch, which live changes are read for. */
+  private _historyIds: string[] = [];
+  /** Who was home over the view, from the last render (§5.10). */
+  private _presence?: Presence;
   /** `frigateSignature` of the states the registry was built from. */
   private _frigateSig = "";
   /** Sources that appeared after the view started and haven't answered yet. */
@@ -255,6 +267,12 @@ export class EventReelCard extends LitElement {
       // Cameras added or removed while Frigate stays: fetch again, once they settle.
       if (frigateChanged && before.includes("frigate") && after.includes("frigate")) {
         this._debouncedRefresh("frigate", 2000);
+      }
+      // A person added or restored with `presence: true`: read their history now.
+      if (this._range && this._config.presence && !this._config.presence.people.length) {
+        const ids = this._historyEntities();
+        if (ids.join() !== this._historyIds.join())
+          void this._fetchContext(this._range, clock.now());
       }
     }
 
@@ -466,25 +484,44 @@ export class EventReelCard extends LitElement {
     this._ensureSubscriptions();
   }
 
+  /** The entities whose history the card reads: the context bands' and the people's. */
+  private _historyEntities(): string[] {
+    const cfg = this._config;
+    if (!cfg) return [];
+    // Two bands may watch one entity (an alarm panel's away and night states).
+    return [
+      ...new Set([
+        ...cfg.context.map((c) => c.entity),
+        ...(cfg.presence
+          ? presenceEntities(cfg.presence, Object.keys(this._hass?.states ?? {}))
+          : []),
+      ]),
+    ];
+  }
+
   /**
-   * History of the context entities over the range, with the state at its start, so a band
-   * that was already on starts at the left edge. Bands are decoration: a failure keeps the
-   * previous ones and only logs.
+   * History of the context and presence entities over the range, with the state at its
+   * start, so a band that was already on starts at the left edge. Presence starts its grace
+   * earlier (§5.10). Both are decoration: a failure keeps the previous ones and only logs.
    */
   private async _fetchContext(range: TimeRange, now: number) {
     const hass = this._hass;
-    // Two bands may watch one entity (an alarm panel's away and night states).
-    const entities = [...new Set(this._config?.context.map((c) => c.entity) ?? [])];
+    const entities = this._historyEntities();
+    this._historyIds = entities;
     const token = ++this._contextToken;
     if (!hass || !entities.length) {
       this._context = new Map();
       return;
     }
+    // Presence reads the grace on both sides: who just left, and who comes home just after.
+    const presence = !!this._config?.presence;
+    const start = presence ? presenceFetchStart(range) : range.start;
+    const end = Math.min(range.end + (presence ? PRESENCE_GRACE : 0), now);
     try {
       const history = await hass.callWS<Record<string, { s: string; lu: number; lc?: number }[]>>({
         type: "history/history_during_period",
-        start_time: new Date(range.start * 1000).toISOString(),
-        end_time: new Date(Math.min(range.end, now) * 1000).toISOString(),
+        start_time: new Date(start * 1000).toISOString(),
+        end_time: new Date(end * 1000).toISOString(),
         entity_ids: entities,
         include_start_time_state: true,
         minimal_response: true,
@@ -517,12 +554,15 @@ export class EventReelCard extends LitElement {
     }
   }
 
-  /** A context entity changed: move the band's edge now rather than on the next refresh. */
+  /**
+   * A context or presence entity changed: move the band's edge, or who is home, now rather
+   * than on the next refresh.
+   */
   private _liveContext(prev: HomeAssistant, hass: HomeAssistant) {
-    if (this._day || !this._config?.context.length) return;
+    if (this._day || !this._historyIds.length) return;
     let changed = false;
     const next = new Map(this._context);
-    for (const entity of new Set(this._config.context.map((c) => c.entity))) {
+    for (const entity of this._historyIds) {
       const before = prev.states[entity];
       const after = hass.states[entity];
       if (!after || before === after || before?.state === after.state) continue;
@@ -1031,6 +1071,7 @@ export class EventReelCard extends LitElement {
       errors: this._errors,
       lastEarlier: this._lastEarlier,
       bands: this._bands,
+      presence: this._presence,
       filter: this._filter,
       cameraNames: this._cameraNames,
       openId: this._openId,
@@ -1080,6 +1121,26 @@ export class EventReelCard extends LitElement {
     );
   }
 
+  /** Who was home over the view, for the rows (§5.10); undefined when presence is off. */
+  private _computePresence(): Presence | undefined {
+    const cfg = this._config;
+    if (!cfg?.presence || !this._range) return undefined;
+    const states = this._hass?.states ?? {};
+    const names = new Map(cfg.presence.people.map((p) => [p.entity, p.name]));
+    // Every person of the last fetch for `presence: true`, else the configured order.
+    const ids = cfg.presence.people.length
+      ? [...names.keys()]
+      : this._historyIds.filter((id) => id.startsWith("person.")).sort();
+    const people = ids.map((id) => ({
+      entity: id,
+      // Without a friendly name, the object id: every full id would start with "person.".
+      name: names.get(id) ?? states[id]?.attributes.friendly_name ?? id.split(".")[1],
+      // Someone listed by hand counts even while their state is unknown (§5.10).
+      listed: names.has(id),
+    }));
+    return computePresence(people, this._context, this._viewRange()!, clock.now());
+  }
+
   private _toggleBand(key: string) {
     const bands = new Set(this._filter.bands);
     if (bands.has(key)) bands.delete(key);
@@ -1091,6 +1152,7 @@ export class EventReelCard extends LitElement {
     if (!this._config) return nothing;
     const t = this._localize;
     this._bands = this._computeBands();
+    this._presence = this._computePresence();
     const view = this._view();
     // A picked band the config no longer has is ignored, so it can't hide every row.
     const picked = this._bands.filter((b) => this._filter.bands?.has(b.key));

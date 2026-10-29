@@ -231,5 +231,15 @@ export function exampleData(now: number): ExampleData {
     row("below_horizon", h(3.5)),
   ];
 
+  // Presence (§5.10): Alex leaves after the morning walk and is back after the last entrance
+  // review (as the logbook says); Sam is out over the away band, so the events between show
+  // "Nobody home".
+  history["person.alex"] = [
+    row("home", h(24.2)),
+    row("not_home", h(14.2) + 300),
+    row("home", h(1.2) + 120),
+  ];
+  history["person.sam"] = [row("home", h(24.2)), row("not_home", h(10.5)), row("home", h(2.2))];
+
   return { reviews, llmvision, eventReel, logbook, history, nestToken };
 }

@@ -177,6 +177,7 @@ cameras:
 | `grouping.window` | `120` | Seconds between events that still group into one row. |
 | `merge.before` / `merge.after` | `15` / `30` | How far (seconds) an AI event may lie before the start or after the end of a Frigate review and still be merged with it. |
 | `context` | none | Up to four periods to highlight, such as away mode or night. An item is an entity id (in the state `on`) or an object with `entity`, `state` (a state or a list, default `on`), `label` and `color`. See [Context bands](#context-bands). |
+| `presence` | off | `true` shows who was home at each row, from every `person` entity, and flags rows while nobody was. A list of entity ids, or objects with `entity` and `name`, picks the people. See [Who was home](#who-was-home). |
 
 `enabled: false` inside a provider object switches it off but keeps its options; the visual
 editor writes that.
@@ -204,6 +205,31 @@ first one listed. The card reads the periods from the recorder's history, so ear
 work as far back as it keeps data (10 days by default). Short blips under 5 minutes, and
 `unavailable` while Home Assistant restarts, don't split a period. Context bands are set in
 YAML; the visual editor keeps them.
+
+### Who was home
+
+With `presence: true`, each row shows the initials of the people who were home when it
+happened (hover for their names), and a crossed-out house when nobody was. It reads every
+`person` entity's history, so it works for past days too. To pick the people, or to use a
+device tracker, list them:
+
+```yaml
+presence:
+  - person.alex
+  - entity: device_tracker.sam_phone
+    name: Sam
+```
+
+A person counts as home in the state `home`. Phones report leaving and arriving late, so
+the first and last 10 minutes of an empty house aren't flagged: the door you lock on your
+way out, or unlock coming home before your phone has caught up, stays unmarked. That holds
+at the end of a past day too. A person's own coming and going is never flagged. Someone
+whose state isn't known yet isn't assumed away, so the card can't say "nobody home" before
+it knows where everyone is. With `presence: true`, a person with no known state in the
+whole range (a person with no tracker, say) is left out; list the people instead to keep
+someone like that counted as possibly home. A row shows up to three initials, or two and
+a count when more people were home. The visual editor has a switch for `presence: true`,
+and keeps a list written in YAML.
 
 ### Running next to an automation
 

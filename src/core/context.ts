@@ -67,7 +67,7 @@ export function mergeTransitions(
  * The intervals within `range` while the entity was in one of `states`, oldest first.
  * `transitions` should start with the state at the start of the range. `unknown` and
  * `unavailable` keep the previous state, so an HA restart neither splits nor starts an
- * interval. Gaps under BRIDGE_GAP are bridged, and closed intervals under MIN_LENGTH that
+ * interval. Gaps under BRIDGE_GAP are bridged, and closed intervals under `minLength` that
  * don't touch the range's edges are dropped. One still in the state at `now` is open.
  */
 export function contextIntervals(
@@ -75,6 +75,7 @@ export function contextIntervals(
   states: string[],
   range: TimeRange,
   now: number,
+  minLength = MIN_LENGTH,
 ): Interval[] {
   const end = Math.min(range.end, now);
   const raw: Interval[] = [];
@@ -104,7 +105,7 @@ export function contextIntervals(
     } else joined.push({ ...i });
   }
   return joined.filter(
-    (i) => i.open || i.start <= range.start || i.end >= end || i.end - i.start >= MIN_LENGTH,
+    (i) => i.open || i.start <= range.start || i.end >= end || i.end - i.start >= minLength,
   );
 }
 

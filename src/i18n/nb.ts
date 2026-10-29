@@ -59,6 +59,8 @@ export const nb: Strings = {
   "meta.by": "av {actor}",
   "meta.unreviewed": "Ikke sett",
   "meta.ongoing": "pågår",
+  "presence.nobody_home": "Ingen hjemme",
+  "presence.home": "Hjemme: {names}",
   "duration.s": "{s} s",
   "duration.m": "{m} min",
   "duration.m_s": "{m} min {s} s",
@@ -115,6 +117,9 @@ export const nb: Strings = {
   "editor.filters": "Filterknapper",
   "editor.day_strip": "Døgnstripe",
   "editor.day_navigation": "Knapper for forrige og neste dag",
+  "editor.presence": "Hvem som var hjemme",
+  "editor.presence_help":
+    "Initialene til dem som var hjemme ved hver hendelse, og et merke når ingen var det",
   "editor.sources": "Kilder",
   "editor.event_reel_enabled": "Event Reel (AI-beskrivelser)",
   "editor.llmvision_enabled": "LLM Vision",

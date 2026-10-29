@@ -6,6 +6,7 @@ import type { NormalizedConfig } from "../config";
 import type { Capabilities } from "../core/capabilities";
 import type { ContextBand } from "../core/context";
 import type { FilterState } from "../core/filters";
+import type { Presence } from "../core/presence";
 import type { TimelineItem } from "../core/grouping";
 import type { MediaResolver } from "../core/media";
 import { formatTime } from "../core/time";
@@ -28,6 +29,8 @@ export interface CardView {
   /** Time of the newest event before the range, shown when the range is empty. */
   lastEarlier?: number;
   bands: ContextBand[];
+  /** Who was home over the view; undefined when presence is off. */
+  presence?: Presence;
   filter: FilterState;
   /** Names of cameras seen in the camera menu, for keeping the active one listed. */
   cameraNames: Map<string, string>;
