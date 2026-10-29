@@ -223,11 +223,12 @@ presence:
 A person counts as home in the state `home`. Phones report leaving and arriving late, so
 the first and last 10 minutes of an empty house aren't flagged: the door you lock on your
 way out, or unlock coming home before your phone has caught up, stays unmarked. That holds
-at the end of a past day too. A person's own coming and going is never flagged. Someone
-whose state isn't known yet isn't assumed away, so the card can't say "nobody home" before
-it knows where everyone is. With `presence: true`, a person with no known state in the
-whole range (a person with no tracker, say) is left out; list the people instead to keep
-someone like that counted as possibly home. A row shows up to three initials, or two and
+at the end of a past day too. Coming and going (any presence event) is never flagged.
+Someone whose state isn't known yet isn't assumed away, so the card can't say "nobody
+home" before it knows where everyone is. With `presence: true`, a person with no known
+state in the range or the 10 minutes around it (a person with no tracker, say) is left
+out; list the people instead to keep someone like that counted as possibly home (an id
+that doesn't exist is ignored). A row shows up to three initials, or two and
 a count when more people were home. The visual editor has a switch for `presence: true`,
 and keeps a list written in YAML.
 

@@ -252,7 +252,9 @@ function normalizePresence(value: unknown): NormalizedPresence | undefined {
       ) {
         throw new Error("Each item under `presence` needs an entity id, such as `person.alex`");
       }
-      return typeof p.name === "string" ? { entity: p.entity, name: p.name } : { entity: p.entity };
+      // An empty name would give a "?" chip: the friendly name serves instead.
+      const name = typeof p.name === "string" ? p.name.trim() : "";
+      return name ? { entity: p.entity, name } : { entity: p.entity };
     }),
   };
 }

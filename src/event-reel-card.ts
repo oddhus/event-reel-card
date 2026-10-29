@@ -19,6 +19,7 @@ import type { ContextBand, Transition } from "./core/context";
 import {
   PRESENCE_GRACE,
   computePresence,
+  pastDayTakesLive,
   presenceEntities,
   presenceFetchStart,
 } from "./core/presence";
@@ -559,7 +560,14 @@ export class EventReelCard extends LitElement {
    * than on the next refresh.
    */
   private _liveContext(prev: HomeAssistant, hass: HomeAssistant) {
-    if (this._day || !this._historyIds.length) return;
+    if (!this._historyIds.length) return;
+    // A past day takes no live changes, except presence's in the grace after its end (§5.10).
+    if (
+      this._day &&
+      (!this._range || !pastDayTakesLive(this._range.end, clock.now(), !!this._config?.presence))
+    ) {
+      return;
+    }
     let changed = false;
     const next = new Map(this._context);
     for (const entity of this._historyIds) {
@@ -1135,8 +1143,11 @@ export class EventReelCard extends LitElement {
       entity: id,
       // Without a friendly name, the object id: every full id would start with "person.".
       name: names.get(id) ?? states[id]?.attributes.friendly_name ?? id.split(".")[1],
-      // Someone listed by hand counts even while their state is unknown (§5.10).
+      // Someone listed by hand counts even while their state is unknown (§5.10). An id that
+      // doesn't exist (a typo, a removed person) doesn't count at all: it would switch the
+      // flag off, for good or until its first recorded state.
       listed: names.has(id),
+      exists: id in states,
     }));
     return computePresence(people, this._context, this._viewRange()!, clock.now());
   }
