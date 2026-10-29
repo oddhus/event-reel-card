@@ -559,7 +559,13 @@ export class EventReelCard extends LitElement {
    * than on the next refresh.
    */
   private _liveContext(prev: HomeAssistant, hass: HomeAssistant) {
-    if (this._day || !this._historyIds.length) return;
+    if (!this._historyIds.length) return;
+    // A past day takes no live changes, except presence's in the grace after its end: someone
+    // coming home at 00:05 decides whether the last minutes of yesterday were empty.
+    if (this._day) {
+      const grace = this._config?.presence ? PRESENCE_GRACE : 0;
+      if (!this._range || clock.now() >= this._range.end + grace) return;
+    }
     let changed = false;
     const next = new Map(this._context);
     for (const entity of this._historyIds) {
@@ -1135,8 +1141,9 @@ export class EventReelCard extends LitElement {
       entity: id,
       // Without a friendly name, the object id: every full id would start with "person.".
       name: names.get(id) ?? states[id]?.attributes.friendly_name ?? id.split(".")[1],
-      // Someone listed by hand counts even while their state is unknown (§5.10).
-      listed: names.has(id),
+      // Someone listed by hand counts even while their state is unknown (§5.10), but not an
+      // id that doesn't exist: a typo would otherwise switch the flag off for good.
+      listed: names.has(id) && id in states,
     }));
     return computePresence(people, this._context, this._viewRange()!, clock.now());
   }

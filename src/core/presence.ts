@@ -161,11 +161,13 @@ export function homeAt(p: Presence, t: number): Person[] {
 
 /**
  * True when nobody was home at the event's start, past the grace at both ends of the empty
- * period. The tracked people's own state changes aren't flagged: someone leaving is what
- * empties the house.
+ * period. Presence events aren't flagged: someone leaving is what empties the house, and a
+ * person shown by another tracker than the one watched, or by an AI source, is the same
+ * coming and going.
  */
 export function whileNobodyHome(p: Presence, e: ReelEvent): boolean {
   if (!p.people.length) return false;
+  if (e.category === "presence") return false;
   if (e.entityId && p.people.some((person) => person.entity === e.entityId)) return false;
   return p.empty.some((i) => inside(i, e.start));
 }

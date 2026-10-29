@@ -44,6 +44,17 @@ describe("presence config", () => {
     });
   });
 
+  it("drops an empty name, so the friendly name is used", () => {
+    expect(
+      presence([
+        { entity: "person.alex", name: "  " },
+        { entity: "person.sam", name: " Sam " },
+      ]),
+    ).toEqual({
+      people: [{ entity: "person.alex" }, { entity: "person.sam", name: "Sam" }],
+    });
+  });
+
   it("refuses a malformed id or a plain string", () => {
     expect(() => presence(["Person.Alex"])).toThrow(/presence/);
     expect(() => presence("person.alex")).toThrow(/presence/);
@@ -108,6 +119,17 @@ describe("who was home", () => {
   it("doesn't flag a tracked person's own state change", () => {
     expect(whileNobodyHome(p, ev({ start: T0 + 12 * H, entityId: "person.sam" }))).toBe(false);
     expect(whileNobodyHome(p, ev({ start: T0 + 12 * H, entityId: "lock.front" }))).toBe(true);
+  });
+
+  it("doesn't flag presence events from another tracker or an AI source", () => {
+    const tracker = ev({
+      start: T0 + 12 * H,
+      entityId: "device_tracker.sam_phone",
+      category: "presence",
+    });
+    const ai = ev({ start: T0 + 12 * H, provider: "llmvision", category: "presence" });
+    expect(whileNobodyHome(p, tracker)).toBe(false);
+    expect(whileNobodyHome(p, ai)).toBe(false);
   });
 
   it("gives a group the people home at any of its events", () => {

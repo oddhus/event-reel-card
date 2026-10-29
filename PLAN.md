@@ -793,7 +793,8 @@ inside them. Use cases: "someone came while we were away" and "activity at night
   entity in `hass` appends a transition at once; those newer than a later answer are
   kept (`mergeTransitions`). An entity with no rows at all (unchanged for longer than the
   recorder keeps) is seeded from its current state when that held over the view. A past
-  day doesn't take live changes. The live range runs on to now between refreshes
+  day doesn't take live changes (with presence on, only until 10 minutes past its end,
+  §5.10). The live range runs on to now between refreshes
   (`_viewRange`), for the bands, the strip and strip taps, so a band that began after the
   last refresh has a place on the strip.
 - **Intervals** (`core/context.ts`, pure): `unknown`/`unavailable` keep the previous state
@@ -876,27 +877,36 @@ can already shade "away mode", but not say who, and a template can't read past s
 - **Config:** `presence: true` watches every `person` entity (sorted by id, resolved at each
   history fetch, and fetched again when the entity registry changes the set, so a person
   added or restored after the card started counts at once); a list of ids or
-  `{entity, name}` picks the people (a device tracker works too). Ids follow the context
+  `{entity, name}` picks the people (a device tracker works too; an empty name falls back to
+  the friendly name). A person who appears without a registry change (a YAML person) waits
+  for the next full refresh (`refresh_interval`, 60 s by default): comparing every state on
+  each update to catch it costs more than it saves. Ids follow the context
   bands' entity id rule, since they go into the same history call. Off by default. The
   editor has a switch: on writes `true`, or keeps a list from YAML (also one switched off
   and on in the same session); off removes the key.
 - **Data:** the context bands' `history/history_during_period` call takes the presence
   entities too, from `PRESENCE_GRACE` (10 min) before the range to the grace after its end
   (or now), so the first and last minutes know who just left or just came home. Bands clip
-  to the range, so the wider window doesn't change them. Live changes append as for bands.
+  to the range, so the wider window doesn't change them. Live changes append as for bands,
+  and on a past day too until the grace after its end has passed (yesterday opened at
+  00:02 takes an arrival at 00:05).
 - **Logic** (`core/presence.ts`, pure): home = the state `home`, through `contextIntervals`
   (so `unknown`/`unavailable` keep the previous state and trips away under 5 min are
   bridged), without its 1-minute minimum: a short visit home still counts. Before a
   person's first known state they are not counted as home but also stop the house from
   counting as empty. A person with no known state over the whole window is left out with
   `presence: true` (a person entity without a tracker would otherwise block the flag
-  forever), and kept as "may be home" when listed by hand. "Nobody home" is the complement
+  forever), and kept as "may be home" when listed by hand and present in `hass.states` (a
+  typo in a listed id would otherwise switch the flag off for good). "Nobody home" is the complement
   of everyone's home intervals, shrunk by the grace at each end (phones report late, so the
   door on the way out or in isn't flagged), except where it starts at the fetched window's
-  start or is still open at now. A tracked person's own state change is never flagged. A
+  start or is still open at now. A presence event is never flagged (a tracked person's own
+  change, another tracker of the same person, or an AI presence event). A
   group shows everyone home at any of its events, and the flag when any event is inside.
 - **Rows:** a column before the dot (`.row.presence` adds the track, at least 3.4em wide
-  and 2.4em on narrow rows so the columns line up; narrow rows hide `.meta`, which then
+  and 2.4em on narrow rows, so the columns line up while the initials fit: each row is its
+  own grid, and a wider cell, such as three chips on a narrow row, shifts that row's title
+  edge; narrow rows hide `.meta`, which then
   takes no track) with overlapping initials as an `img` labelled "Home: Alex, Sam", at
   most three chips (two and "+N" for more), and `mdi:home-off-outline` in the warning
   color, labelled "Nobody home". Initials go from short to long per name (first letter;
