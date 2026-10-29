@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The project uses
 
 ## Unreleased
 
+## [0.6.0] - 2026-10-29
+
 ### Added
 
 - `presence`: each row shows the initials of the people who were home when it happened,
