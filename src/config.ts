@@ -52,6 +52,17 @@ export interface NormalizedContext {
   color?: string;
 }
 
+/** A person (or device tracker) whose presence the rows show (§5.10). */
+export interface PresenceConfig {
+  entity: string;
+  name?: string;
+}
+
+/** `people` empty: every `person` entity. */
+export interface NormalizedPresence {
+  people: PresenceConfig[];
+}
+
 /** The strip can't tell more bands apart. */
 export const MAX_CONTEXT = 4;
 
@@ -87,6 +98,8 @@ export interface CardConfig {
   day_navigation?: boolean;
   /** Periods shaded on the strip and marked on rows, such as away mode or night. */
   context?: (string | ContextConfig)[];
+  /** Who was home at each row, and a flag when nobody was: `true` for every person. */
+  presence?: boolean | (string | PresenceConfig)[];
 }
 
 export interface NormalizedConfig {
@@ -110,6 +123,8 @@ export interface NormalizedConfig {
   dayStrip: boolean;
   dayNavigation: boolean;
   context: NormalizedContext[];
+  /** Undefined when presence is off (the default). */
+  presence?: NormalizedPresence;
 }
 
 function toggle(value: unknown): ProviderToggle {
@@ -187,6 +202,7 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
     dayStrip: config.day_strip !== false,
     dayNavigation: config.day_navigation !== false,
     context,
+    presence: normalizePresence(config.presence),
   };
 }
 
@@ -217,4 +233,26 @@ function normalizeContext(value: unknown): NormalizedContext[] {
       color: typeof c.color === "string" ? c.color : undefined,
     };
   });
+}
+
+function normalizePresence(value: unknown): NormalizedPresence | undefined {
+  if (value == null || value === false) return undefined;
+  if (value === true) return { people: [] };
+  if (!Array.isArray(value)) throw new Error("`presence` must be true or a list of people");
+  if (!value.length) return undefined;
+  return {
+    people: value.map((item: unknown) => {
+      const p = (typeof item === "string" ? { entity: item } : item) as PresenceConfig | null;
+      // The ids go into the context bands' history call, which one malformed id would fail.
+      if (
+        !p ||
+        typeof p !== "object" ||
+        typeof p.entity !== "string" ||
+        !ENTITY_ID.test(p.entity)
+      ) {
+        throw new Error("Each item under `presence` needs an entity id, such as `person.alex`");
+      }
+      return typeof p.name === "string" ? { entity: p.entity, name: p.name } : { entity: p.entity };
+    }),
+  };
 }

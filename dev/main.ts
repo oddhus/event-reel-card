@@ -15,6 +15,7 @@ import type { WsHandler } from "./mock-hass";
 //                                    Vision (?ai=both: both, the same moments described twice)
 //   ?slow=frigate:5,llmvision:hang   delay a source by seconds, or never answer
 //                                    (also: entity, nest, history for actors)
+//   ?presence=0 / ?context=0         no presence marks / no context bands
 const params = new URLSearchParams(location.search);
 const pinned = params.get("now");
 if (pinned) {
@@ -83,6 +84,7 @@ states["binary_sensor.front_door"] = st("binary_sensor.front_door", "off", {
   device_class: "door",
 });
 states["person.alex"] = st("person.alex", "home", { friendly_name: "Alex" });
+states["person.sam"] = st("person.sam", "home", { friendly_name: "Sam" });
 states["calendar.llm_vision_timeline"] = st("calendar.llm_vision_timeline", "off");
 
 // A neutral stand-in thumbnail: sky, ground and a figure, tinted per event.
@@ -232,6 +234,7 @@ card.setConfig({
         ],
       }),
   ...(params.get("filters") === "0" ? { filters: false } : {}),
+  ...(params.get("presence") === "0" ? {} : { presence: true }),
 });
 stage.appendChild(card);
 

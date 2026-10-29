@@ -124,6 +124,7 @@ export class EventReelCardEditor extends LitElement {
           { name: "filters", selector: { boolean: {} } },
           { name: "day_strip", selector: { boolean: {} } },
           { name: "day_navigation", selector: { boolean: {} } },
+          { name: "presence", selector: { boolean: {} } },
         ],
       },
       {

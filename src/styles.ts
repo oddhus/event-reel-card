@@ -249,6 +249,51 @@ export const styles = css`
     color: color-mix(in srgb, var(--error-color, #db4437) 50%, var(--primary-text-color, #212121));
     background: color-mix(in srgb, var(--error-color, #db4437) 18%, transparent);
   }
+  /* Who was home (§5.10): a column of initials, or a crossed house, before the dot. */
+  .row.presence {
+    grid-template-columns:
+      var(--reel-time-width) var(--reel-slot-width) minmax(0, 1fr) auto minmax(3.4em, auto)
+      10px;
+  }
+  .home {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+  }
+  .home .nobody {
+    display: inline-flex;
+    flex: none;
+    width: 18px;
+    height: 18px;
+    --mdc-icon-size: 18px;
+    color: var(--warning-color, #ffa600);
+  }
+  .who {
+    display: inline-flex;
+  }
+  .initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6em;
+    height: 1.6em;
+    padding: 0 0.2em;
+    box-sizing: border-box;
+    border-radius: 0.8em;
+    border: 1px solid var(--ha-card-background, var(--card-background-color, #fff));
+    font-size: 0.7em;
+    font-weight: 500;
+    color: var(--primary-text-color);
+    background: color-mix(
+      in srgb,
+      var(--primary-color) 22%,
+      var(--ha-card-background, var(--card-background-color, #fff))
+    );
+  }
+  .initial + .initial {
+    margin-left: -0.35em;
+  }
   .desc {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -290,6 +335,10 @@ export const styles = css`
       gap: 8px;
       padding: 4px 10px 4px 12px;
       grid-template-columns: 40px var(--reel-slot-width) minmax(0, 1fr) 0 8px;
+    }
+    .row.presence {
+      /* .meta is hidden here, so it takes no track. */
+      grid-template-columns: 40px var(--reel-slot-width) minmax(0, 1fr) minmax(2.4em, auto) 8px;
     }
     .meta {
       display: none;

@@ -15,6 +15,7 @@ export interface EditorForm {
   filters: boolean;
   day_strip: boolean;
   day_navigation: boolean;
+  presence: boolean;
   event_reel_enabled: boolean;
   llmvision_enabled: boolean;
   llmvision_non_camera: boolean;
@@ -39,6 +40,7 @@ export function configToForm(config: CardConfig): EditorForm {
     filters: n.filters,
     day_strip: n.dayStrip,
     day_navigation: n.dayNavigation,
+    presence: n.presence !== undefined,
     event_reel_enabled: n.event_reel.enabled,
     llmvision_enabled: n.llmvision.enabled,
     llmvision_non_camera: n.llmvision.non_camera,
@@ -121,6 +123,11 @@ export function formToConfig(
   setOrDrop(out, orig, "filters", form.filters ?? true, true);
   setOrDrop(out, orig, "day_strip", form.day_strip ?? true, true);
   setOrDrop(out, orig, "day_navigation", form.day_navigation ?? true, true);
+  // On keeps a list of people written in YAML, also one switched off and on again in this
+  // editor; off removes the key, the default.
+  const people = [original.presence, initial.presence].find((p) => Array.isArray(p) && p.length);
+  if (form.presence) out.presence = people ?? true;
+  else delete out.presence;
 
   // Keep each remaining entity's own options; new ones are plain ids.
   const existing = new Map<string, string | EntityConfig>();

@@ -610,6 +610,7 @@ context:                       # P2: highlight periods (§5.6)
     state: "on"
     label: Away
     color: red
+presence: true                 # who was home at each row (§5.10); or a list of people
 merge: { before: 15, after: 30 }
 ```
 
@@ -867,6 +868,44 @@ to the clip.
   a second Frigate instance appearing gets no review subscription of its own until the next
   view (subscriptions are per provider type).
 
+### 5.10 Presence at event time (P2, done after 0.5.0)
+
+Who was home when each row happened, and a flag for rows while nobody was. Context bands
+can already shade "away mode", but not say who, and a template can't read past states.
+
+- **Config:** `presence: true` watches every `person` entity (sorted by id, resolved at each
+  history fetch, and fetched again when the entity registry changes the set, so a person
+  added or restored after the card started counts at once); a list of ids or
+  `{entity, name}` picks the people (a device tracker works too). Ids follow the context
+  bands' entity id rule, since they go into the same history call. Off by default. The
+  editor has a switch: on writes `true`, or keeps a list from YAML (also one switched off
+  and on in the same session); off removes the key.
+- **Data:** the context bands' `history/history_during_period` call takes the presence
+  entities too, from `PRESENCE_GRACE` (10 min) before the range to the grace after its end
+  (or now), so the first and last minutes know who just left or just came home. Bands clip
+  to the range, so the wider window doesn't change them. Live changes append as for bands.
+- **Logic** (`core/presence.ts`, pure): home = the state `home`, through `contextIntervals`
+  (so `unknown`/`unavailable` keep the previous state and trips away under 5 min are
+  bridged), without its 1-minute minimum: a short visit home still counts. Before a
+  person's first known state they are not counted as home but also stop the house from
+  counting as empty. A person with no known state over the whole window is left out with
+  `presence: true` (a person entity without a tracker would otherwise block the flag
+  forever), and kept as "may be home" when listed by hand. "Nobody home" is the complement
+  of everyone's home intervals, shrunk by the grace at each end (phones report late, so the
+  door on the way out or in isn't flagged), except where it starts at the fetched window's
+  start or is still open at now. A tracked person's own state change is never flagged. A
+  group shows everyone home at any of its events, and the flag when any event is inside.
+- **Rows:** a column before the dot (`.row.presence` adds the track, at least 3.4em wide
+  and 2.4em on narrow rows so the columns line up; narrow rows hide `.meta`, which then
+  takes no track) with overlapping initials as an `img` labelled "Home: Alex, Sam", at
+  most three chips (two and "+N" for more), and `mdi:home-off-outline` in the warning
+  color, labelled "Nobody home". Initials go from short to long per name (first letter;
+  first and last word's first letters, or a one-word name's first two; then one letter
+  more) until no two clash. A badge in the title was tried and dropped: it read like the
+  threat badge and took title space on narrow rows. Not done: a "nobody home" filter chip
+  or strip band (a context band on `zone.home` with state `0` covers that, without the
+  grace).
+
 ---
 
 ## 6. Feature backlog
@@ -875,7 +914,7 @@ to the clip.
 |---|---|
 | P0 (M1) | Entity provider, LLM Vision provider, Frigate reviews provider, many-to-one merge, doorbell clips by Nest token, compact rows, grouping (bursts, bounces, camera groups), animated previews with fallback chain, HLS player with codec fallback, rolling 24 h range, nb/en |
 | P1 | Mark reviewed (+ mark all), download, filter chips and summary, day strip, deep links, GUI editor and stub config, HACS release |
-| P2 | ~~Day navigation~~ (done), ~~context bands~~ (done), calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search across days (a one-day version was built and dropped as too little gain over the chips; revisit when AI descriptions are reliable), presence at event time, "Summarize the day" (off by default) |
+| P2 | ~~Day navigation~~ (done), ~~context bands~~ (done), calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search across days (a one-day version was built and dropped as too little gain over the chips; revisit when AI descriptions are reliable), ~~presence at event time~~ (done), "Summarize the day" (off by default) |
 | P3 | Multi-camera sync, public provider API (`window.eventReel.registerProvider`), Reolink media-source provider, weekly heatmap |
 
 ---
