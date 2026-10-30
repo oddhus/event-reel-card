@@ -84,14 +84,14 @@ You need Home Assistant 2024.11 or newer.
 ### With HACS (recommended)
 
 1. Make sure [HACS](https://hacs.xyz) is installed.
-2. Click the button below. It opens HACS on your own Home Assistant with this repository
-   selected:
+2. In HACS, search for **Event Reel Card** and open it. Or click the button below. It
+   opens HACS on your own Home Assistant with this repository selected:
 
    [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=oddhus&repository=event-reel-card&category=plugin)
 
-   If the button doesn't work, add it by hand: in HACS, open the menu (⋮) →
+   If the search doesn't find it, add it by hand: in HACS, open the menu (⋮) →
    **Custom repositories**, enter `https://github.com/oddhus/event-reel-card`, choose the
-   type **Dashboard** and click **Add**. Then search for **Event Reel Card**.
+   type **Dashboard** and click **Add**. Then search for **Event Reel Card** again.
 3. Click **Download**, and pick the latest version.
 4. Reload the browser (or, in the Companion app, **Settings → Companion app → Reset
    frontend cache**). HACS adds the dashboard resource for you.

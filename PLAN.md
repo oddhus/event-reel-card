@@ -972,13 +972,15 @@ can already shade "away mode", but not say who, and a template can't read past s
 - Use SemVer, starting at `v0.1.0`. Keep a `CHANGELOG.md`.
 - HACS default repositories (checked 2026-10-13 in HACS's "include" guide): the HACS
   Action must pass with no ignores, then a full GitHub release (not just a tag) must follow,
-  then a PR to `hacs/default` adds the repository. Reviews take months. The card can be
-  submitted on its own; the brands check only applies to integrations.
+  then a PR to `hacs/default` adds the repository. The card can be submitted on its own;
+  the brands check only applies to integrations. Both are in the default list since
+  2026-10-24 (`hacs/default` #12089 for the card, #12105 for the integration), so the
+  README leads with the HACS search and keeps the custom repository as the fallback.
 - Test installing the tagged release through HACS, not only a local `dist/` copy.
 - The README covers features, a screenshot or GIF (from the dev harness with neutral
-  footage, never private camera footage without the owner's OK), install
-  (HACS custom repository and manual), the config reference, "Register your own
-  events", the dependency tiers (§3.8), and troubleshooting (HEVC, retention, signed
+  footage, never private camera footage without the owner's OK), install (HACS search,
+  a custom repository as the fallback, and manual), the config reference, "Register your
+  own events", the dependency tiers (§3.8), and troubleshooting (HEVC, retention, signed
   URLs, the Frigate notification proxy option).
 
 ---
