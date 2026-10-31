@@ -13,7 +13,7 @@ import { formatTime } from "../core/time";
 import type { TimeFormatOptions } from "../core/time";
 import type { Category, Localize, ReelEvent, TimeRange } from "../types";
 
-export interface CardView {
+export type CardView = {
   t: Localize;
   config: NormalizedConfig;
   resolver: MediaResolver;
@@ -56,7 +56,7 @@ export interface CardView {
   navTo(day: string | undefined): void;
   previousDay(): void;
   nextDay(): void;
-}
+};
 
 /** A time of day in the card's locale and time zone. */
 export const time = (view: CardView, epoch: number) => formatTime(epoch, view.timeOpts);

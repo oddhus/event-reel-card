@@ -3,7 +3,7 @@
 
 import type { Category, ReelEvent } from "../types";
 
-export interface MergeOptions {
+export type MergeOptions = {
   /** Seconds a text event may precede the media start. */
   before: number;
   /** Seconds a text event may follow the media end. */
@@ -13,7 +13,7 @@ export interface MergeOptions {
   /** Hide unmatched media on cameras that have an AI producer, after `graceSeconds`. */
   hideUnconfirmed: boolean;
   graceSeconds?: number;
-}
+};
 
 /** Providers whose events are AI text about a camera moment. */
 export const AI_PROVIDERS = ["llmvision", "event_reel"];

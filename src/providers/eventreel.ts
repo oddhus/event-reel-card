@@ -11,7 +11,7 @@ import type { Localize, MediaRef, Provider, ProviderContext, ReelEvent, TimeRang
 import type { CameraRegistry } from "../core/cameras";
 
 /** One event as the integration stores it. */
-export interface EventReelRecord {
+export type EventReelRecord = {
   id: string;
   start: string;
   end?: string | null;
@@ -25,15 +25,15 @@ export interface EventReelRecord {
   /** `video: false` for a Nest camera that sent only a picture (no clip). */
   nest?: { device_id?: string; event_token?: string; video?: boolean } | null;
   analysis?: string;
-}
+};
 
-export interface EventReelMapContext {
+export type EventReelMapContext = {
   cameras: CameraRegistry;
   /** Whether Nest clips may be attached (the card's `nest` toggle). */
   nest: boolean;
   localize: Localize;
   friendlyName(entityId: string): string | undefined;
-}
+};
 
 /** A key frame or image: a media-source id resolves to a signed URL, a path is signed. */
 function imageRef(path: string | null | undefined): MediaRef | undefined {
@@ -96,9 +96,9 @@ export function eventReelToEvents(raw: EventReelRecord[], ctx: EventReelMapConte
   return out;
 }
 
-interface ListResult {
+type ListResult = {
   events?: EventReelRecord[];
-}
+};
 
 const isoOf = (epoch: number) => new Date(epoch * 1000).toISOString();
 

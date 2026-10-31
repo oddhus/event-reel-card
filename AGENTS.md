@@ -12,7 +12,7 @@ Update it when a decision changes.
 
 - `npm run dev`: dev harness with a mock `hass` at http://localhost:5173, and a Frigate
   proxy when `FRIGATE_URL` is set in `.env.local`
-- `npm test`, `npm run lint` (ESLint and `tsc --noEmit`), `npm run build`
+- `npm test`, `npm run lint` (oxlint and `tsc --noEmit`), `npm run lint:fix`, `npm run build`
 
 ## Architecture
 
@@ -64,6 +64,19 @@ Add options in `src/config.ts` (`normalizeConfig`), document them in the README 
 table, and add the common ones to the visual editor (`src/editor-model.ts`,
 `src/editor.ts`). Leaving an option out must keep the current behavior. While the version
 is 0.x an option may still change in a minor release; say so in the CHANGELOG.
+
+## Lint
+
+`npm run lint` runs oxlint with type-aware rules, then `tsc --noEmit`. The rules in
+`.oxlintrc.json` follow [elmeragroup/fuse](https://github.com/elmeragroup/fuse/blob/main/.oxlintrc.json),
+and warnings fail the run too. `npm run lint:fix` applies the safe fixes; run Prettier on
+the files afterwards, since a fix can leave a line unformatted.
+The overrides at the end of `.oxlintrc.json` that turn one rule off for a list of files
+hold the violations that were there when oxlint came in. Never add a file to them. When you
+change a listed file, fix its violations of that rule and take it off the list; delete an
+override when its list is empty.
+Disable a rule on a line only where the code is right and the rule can't see why, and give
+the reason after `--`, as in `// oxlint-disable-next-line typescript/consistent-type-definitions -- declaration merging needs an interface`.
 
 ## Tests
 

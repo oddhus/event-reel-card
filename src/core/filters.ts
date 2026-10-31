@@ -20,14 +20,14 @@ export const CATEGORY_ORDER: Category[] = [
   "custom",
 ];
 
-export interface FilterState {
+export type FilterState = {
   /** Empty = all categories. */
   categories: Set<Category>;
   /** A camera key from `mediaKey`; undefined = all. */
   camera?: string;
   /** Context band entities (§5.6); empty or undefined = no band filter. */
   bands?: Set<string>;
-}
+};
 
 /** The camera an event belongs to, for the camera filter; not per-event media keys. */
 export function cameraKey(e: ReelEvent): string | undefined {
@@ -58,10 +58,10 @@ export function itemCameras(item: TimelineItem): Set<string> {
   return keys;
 }
 
-export interface CategoryCount {
+export type CategoryCount = {
   category: Category;
   count: number;
-}
+};
 
 /** Rows containing each category (a lock + door burst counts for both), in display order. */
 export function summarize(items: TimelineItem[]): CategoryCount[] {
@@ -75,11 +75,11 @@ export function summarize(items: TimelineItem[]): CategoryCount[] {
   }));
 }
 
-export interface CameraOption {
+export type CameraOption = {
   key: string;
   name: string;
   count: number;
-}
+};
 
 export function cameraOptions(
   items: TimelineItem[],
@@ -98,11 +98,11 @@ export function cameraOptions(
   return [...options.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export interface Capped<T> {
+export type Capped<T> = {
   list: T[];
   /** Events in the entries left out. */
   hidden: number;
-}
+};
 
 /**
  * The first entries (newest first) holding at most `max` events, where `size` counts the

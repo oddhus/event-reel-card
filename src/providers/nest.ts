@@ -3,11 +3,11 @@
 
 import type { HomeAssistant } from "../ha-types";
 
-interface BrowseNode {
+type BrowseNode = {
   media_content_id: string;
   title?: string;
   children?: BrowseNode[];
-}
+};
 
 const ROOT = "media-source://nest";
 /** Minimum seconds between two browses. */

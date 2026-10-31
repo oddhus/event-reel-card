@@ -16,27 +16,27 @@ export type Category =
   | "calendar"
   | "custom";
 
-export interface MediaRef {
+export type MediaRef = {
   kind: "hls" | "mp4" | "image" | "gif";
   /** HA-relative path (signed when it starts with /api/ or /media/), a full URL, or a media-source id. */
   path: string;
   /** True for media-source ids, which `media_source/resolve_media` turns into a signed URL. */
   resolve?: boolean;
-}
+};
 
-export interface FrigateRef {
+export type FrigateRef = {
   instance: string;
   camera: string;
   reviewId?: string;
-}
+};
 
-export interface ExtraText {
+export type ExtraText = {
   start: number;
   title: string;
   description?: string;
-}
+};
 
-export interface ReelEvent {
+export type ReelEvent = {
   /** `${provider}:${nativeId}` */
   id: string;
   provider: string;
@@ -82,28 +82,28 @@ export interface ReelEvent {
   /** Who or what caused it, when cheaply known. */
   actor?: string;
   raw?: unknown;
-}
+};
 
-export interface TimeRange {
+export type TimeRange = {
   start: number;
   end: number;
-}
+};
 
 export type Localize = (key: string, params?: Record<string, string | number>) => string;
 
-export interface ProviderContext {
+export type ProviderContext = {
   hass: HomeAssistant;
   config: NormalizedConfig;
   cameras: CameraRegistry;
   localize: Localize;
   now: number;
-}
+};
 
-export interface Provider {
+export type Provider = {
   readonly type: string;
   fetch(range: TimeRange, ctx: ProviderContext): Promise<ReelEvent[]>;
   /** Events derived from a hass update (instant updates); reconciled on the next fetch. */
   live?(prev: HomeAssistant, next: HomeAssistant, ctx: ProviderContext): ReelEvent[];
   /** Subscribe to push updates; call onChange to request a refetch. Returns an unsubscribe. */
   subscribe?(ctx: ProviderContext, onChange: () => void): () => void;
-}
+};

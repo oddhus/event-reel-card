@@ -4,38 +4,38 @@
 
 import type { ReelEvent } from "../types";
 
-export interface BurstStep {
+export type BurstStep = {
   label: string;
   /** Number of changes collapsed into this step (bounces). */
   count: number;
   event: ReelEvent;
-}
+};
 
-export interface BurstSegment {
+export type BurstSegment = {
   name: string;
   entityId?: string;
   steps: BurstStep[];
-}
+};
 
-interface ItemBase {
+type ItemBase = {
   id: string;
   /** Latest start among the item's events; the list is sorted by this, newest first. */
   sortTime: number;
   start: number;
   end: number;
-}
+};
 
 export type TimelineItem =
   | (ItemBase & { kind: "event"; event: ReelEvent })
   | (ItemBase & { kind: "burst"; events: ReelEvent[]; segments: BurstSegment[] })
   | (ItemBase & { kind: "camera"; camera: string; events: ReelEvent[] });
 
-export interface GroupingOptions {
+export type GroupingOptions = {
   /** Seconds between consecutive events that still belong to one group. */
   window: number;
   /** Seconds within which flips of the same entity collapse into one step. */
   bounceWindow?: number;
-}
+};
 
 const BURST_EXCLUDED = new Set(["presence", "calendar"]);
 
@@ -113,7 +113,7 @@ function buildSegments(events: ReelEvent[], bounceWindow: number): BurstSegment[
   for (const step of steps) {
     const name = step.event.stateLabel !== undefined ? step.event.title : "";
     const last = segments[segments.length - 1];
-    if (last && last.name === name && name !== "") last.steps.push(step);
+    if (last?.name === name && name !== "") last.steps.push(step);
     else segments.push({ name, entityId: step.event.entityId, steps: [step] });
   }
   return segments;

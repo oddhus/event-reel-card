@@ -15,7 +15,7 @@ const HAVE_FUTURE_DATA = 3;
 
 export type StallVerdict = "wait" | "unavailable" | "codec";
 
-export interface StallState {
+export type StallState = {
   /** A native player (Safari's HLS, a plain MP4) rather than hls.js. */
   native: boolean;
   /** Seconds since anything last loaded. */
@@ -28,7 +28,7 @@ export interface StallState {
   bufferedAhead: number;
   /** This camera's last clip also stalled after its metadata loaded, and none played since. */
   stalledBefore: boolean;
-}
+};
 
 /**
  * A native player that can't decode a recording says nothing (hls.js reports a media error

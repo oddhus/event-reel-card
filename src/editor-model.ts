@@ -5,7 +5,7 @@ import { normalizeConfig } from "./config";
 import type { CardConfig, EntityConfig } from "./config";
 import { parseRangeStrict } from "./core/time";
 
-export interface EditorForm {
+export type EditorForm = {
   title: string;
   density: "compact" | "comfortable";
   range: string;
@@ -23,7 +23,7 @@ export interface EditorForm {
   frigate_show_unmatched: boolean;
   frigate_alerts_only: boolean;
   nest_enabled: boolean;
-}
+};
 
 const rangeText = (r: CardConfig["range"]) =>
   r === undefined ? "24h" : typeof r === "number" ? `${r}h` : String(r);

@@ -4,12 +4,12 @@ import type { NormalizedConfig } from "../config";
 import type { HomeAssistant } from "../ha-types";
 import type { CameraRegistry } from "./cameras";
 
-export interface Capabilities {
+export type Capabilities = {
   llmvision: boolean;
   event_reel: boolean;
   frigate: boolean;
   nest: boolean;
-}
+};
 
 export function detectCapabilities(hass: HomeAssistant, cameras: CameraRegistry): Capabilities {
   const components = hass.config?.components ?? [];

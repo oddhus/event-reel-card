@@ -7,7 +7,7 @@ import { frigateMedia } from "../core/media";
 import { objectLabel } from "../i18n";
 import type { Localize, Provider, ProviderContext, ReelEvent, TimeRange } from "../types";
 
-export interface FrigateReviewMetadata {
+export type FrigateReviewMetadata = {
   title?: string;
   shortSummary?: string;
   scene?: string;
@@ -15,9 +15,9 @@ export interface FrigateReviewMetadata {
   potential_threat_level?: number;
   /** The user's configured "additional concerns" the model observed. */
   other_concerns?: string[] | null;
-}
+};
 
-export interface FrigateReview {
+export type FrigateReview = {
   id: string;
   camera: string;
   start_time: number;
@@ -31,7 +31,7 @@ export interface FrigateReview {
     zones?: string[];
     metadata?: FrigateReviewMetadata | null;
   };
-}
+};
 
 /**
  * Fetches reviewed and unreviewed items separately and merges them. Frigate 0.18 returns
@@ -122,10 +122,10 @@ export function parseReviews(result: unknown): FrigateReview[] {
 
 const cleanLabel = (label: string) => label.replace(/-verified$/, "");
 
-export interface ReviewMapContext {
+export type ReviewMapContext = {
   cameras: CameraRegistry;
   localize: Localize;
-}
+};
 
 export function reviewToEvent(
   review: FrigateReview,
@@ -255,7 +255,7 @@ export async function markReviewed(
           viewed: true,
         }),
       );
-      if (result && result.success === false) throw new Error(result.message || "Frigate refused");
+      if (result?.success === false) throw new Error(result.message || "Frigate refused");
     }),
   );
 }

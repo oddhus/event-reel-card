@@ -14,14 +14,14 @@ export const PRESENCE_GRACE = 10 * 60;
 
 const INVALID = new Set(["unknown", "unavailable"]);
 
-export interface Person {
+export type Person = {
   entity: string;
   name: string;
   /** One or two letters, unique among the people when it can be. */
   initials: string;
-}
+};
 
-export interface Presence {
+export type Presence = {
   people: Person[];
   /** Per entity: the intervals at home. */
   home: Map<string, Interval[]>;
@@ -29,7 +29,7 @@ export interface Presence {
   knownFrom: Map<string, number>;
   /** When nobody was home, without the grace at either end. */
   empty: Interval[];
-}
+};
 
 /** The range history is fetched over: the grace before the range decides its first minutes. */
 export const presenceFetchStart = (range: TimeRange) => range.start - PRESENCE_GRACE;

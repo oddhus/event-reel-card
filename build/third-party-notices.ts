@@ -8,13 +8,13 @@ import type { Rolldown } from "vite";
 // bundle (what Vite's `build.license` collects, but inside the one file HACS installs).
 
 /** A license text and the package it covers. */
-export interface Notice {
+export type Notice = {
   /** `name version`, or `name version inside host` */
   package: string;
   /** SPDX expression from package.json */
   license?: string;
   text: string;
-}
+};
 
 /**
  * Code that a bundled package inlines into its own dist files, so it has no node_modules
