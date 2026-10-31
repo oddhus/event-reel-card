@@ -7,20 +7,20 @@ import { itemEvents } from "./filters";
 import type { TimelineItem } from "./grouping";
 
 /** A state an entity entered at a time (epoch seconds). */
-export interface Transition {
+export type Transition = {
   state: string;
   at: number;
-}
+};
 
-export interface Interval {
+export type Interval = {
   start: number;
   /** Exclusive; for an open interval, the time it was computed at. */
   end: number;
   /** Still in the state: it covers everything after `start`. */
   open?: boolean;
-}
+};
 
-export interface ContextBand {
+export type ContextBand = {
   /** The band's index in the config, as a string: two bands may watch one entity. */
   key: string;
   entity: string;
@@ -28,7 +28,7 @@ export interface ContextBand {
   /** A CSS color. */
   color: string;
   intervals: Interval[];
-}
+};
 
 /** Off-periods shorter than this join the intervals around them (someone leaving twice). */
 export const BRIDGE_GAP = 5 * 60;

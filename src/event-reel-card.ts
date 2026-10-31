@@ -899,7 +899,7 @@ export class EventReelCard extends LitElement {
     const out = events.map((e) => {
       const sig = JSON.stringify(e, (k, v) => (k === "raw" ? undefined : v));
       const prev = this._stable.get(e.id);
-      const event = prev && prev.sig === sig ? prev.event : e;
+      const event = prev?.sig === sig ? prev.event : e;
       next.set(e.id, { sig, event });
       return event;
     });

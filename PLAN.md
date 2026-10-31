@@ -952,7 +952,7 @@ can already shade "away mode", but not say who, and a template can't read past s
    - Fixtures: commit only anonymized `*.example.json`. Real snapshots go in
      `*.local.json` (gitignored).
 3. `npm test`: Vitest unit tests (merge, grouping, cameras, provider parsers, time).
-4. `npm run build` → `dist/event-reel-card.js`. `npm run lint` (eslint + tsc
+4. `npm run build` → `dist/event-reel-card.js`. `npm run lint` (oxlint + tsc
    `--noEmit`).
 5. Check: desktop Chrome, Firefox (no HEVC), mobile width 375 px, the HA Companion app
    on Android (and iOS if available), light and dark themes.

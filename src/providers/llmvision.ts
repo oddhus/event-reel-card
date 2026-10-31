@@ -10,7 +10,7 @@ import type { HomeAssistant } from "../ha-types";
 import type { Category, MediaRef, Provider, ProviderContext, ReelEvent, TimeRange } from "../types";
 import { NestTokenResolver } from "./nest";
 
-export interface LlmVisionEvent {
+export type LlmVisionEvent = {
   uid: string;
   title?: string;
   description?: string;
@@ -20,15 +20,15 @@ export interface LlmVisionEvent {
   camera_name?: string;
   category?: string;
   label?: string;
-}
+};
 
-export interface LlmVisionMapContext {
+export type LlmVisionMapContext = {
   cameras: CameraRegistry;
   /** Nest token → device id. */
   nestDevices: Map<string, string>;
   nonCamera: boolean;
   friendlyName(entityId: string): string | undefined;
-}
+};
 
 const category = (e: LlmVisionEvent): Category | undefined =>
   categoryFromLabel(e.category) ?? categoryFromLabel(e.label);
@@ -84,9 +84,9 @@ export function llmvisionToEvents(raw: LlmVisionEvent[], ctx: LlmVisionMapContex
   return out;
 }
 
-interface ServiceResponse {
+type ServiceResponse = {
   response?: { events?: LlmVisionEvent[] };
-}
+};
 
 /**
  * Milliseconds the events wait for the Nest lookup. A slower lookup must not hold back every

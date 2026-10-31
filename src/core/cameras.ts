@@ -5,21 +5,21 @@
 import type { HassEntity, HassEntityRegistryEntry } from "../ha-types";
 import type { FrigateRef } from "../types";
 
-export interface CameraInfo {
+export type CameraInfo = {
   key: string;
   name: string;
   deviceId?: string;
   platform?: string;
   frigate?: Omit<FrigateRef, "reviewId">;
-}
+};
 
-export interface CameraRegistryInput {
+export type CameraRegistryInput = {
   states: Record<string, HassEntity>;
   entities: Record<string, HassEntityRegistryEntry>;
   aliases?: Record<string, string>;
-}
+};
 
-export interface CameraRegistry {
+export type CameraRegistry = {
   get(key: string): CameraInfo | undefined;
   all(): CameraInfo[];
   /** Resolves a camera entity, image entity or alias to a canonical camera key. Never guesses. */
@@ -30,7 +30,7 @@ export interface CameraRegistry {
   byDevice(deviceId: string, preferPlatform?: string): string | undefined;
   /** Frigate instance ids in use. */
   frigateInstances(): string[];
-}
+};
 
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v ? v : undefined;

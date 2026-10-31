@@ -2,7 +2,7 @@ import type { Category } from "./types";
 import { parseRange } from "./core/time";
 import type { RangeSpec } from "./core/time";
 
-export interface EntityConfig {
+export type EntityConfig = {
   entity: string;
   name?: string;
   icon?: string;
@@ -10,68 +10,68 @@ export interface EntityConfig {
   states?: Record<string, string>;
   only_states?: string[];
   actor_attribute?: string;
-}
+};
 
 /** A provider is "explicit" when the user configured it; only explicit providers warn when missing. */
-interface ProviderToggle {
+type ProviderToggle = {
   enabled: boolean;
   explicit: boolean;
-}
+};
 
-export interface LlmVisionConfig extends ProviderToggle {
+export type LlmVisionConfig = {
   non_camera: boolean;
   categories: string[];
-}
+} & ProviderToggle;
 
-export interface FrigateConfig extends ProviderToggle {
+export type FrigateConfig = {
   cameras: "auto" | string[];
   severity: string[];
   show_unmatched: boolean;
   hide_unconfirmed: boolean;
   clip_padding: [number, number];
-}
+} & ProviderToggle;
 
 export type NestConfig = ProviderToggle;
 
 export type EventReelConfig = ProviderToggle;
 
 /** A period to highlight, while an entity is in one of the states (§5.6). */
-export interface ContextConfig {
+export type ContextConfig = {
   entity: string;
   /** Default "on". */
   state?: string | string[];
   label?: string;
   /** An HA color name (`red`, `indigo`…) or any CSS color. */
   color?: string;
-}
+};
 
-export interface NormalizedContext {
+export type NormalizedContext = {
   entity: string;
   states: string[];
   label?: string;
   color?: string;
-}
+};
 
 /** A person (or device tracker) whose presence the rows show (§5.10). */
-export interface PresenceConfig {
+export type PresenceConfig = {
   entity: string;
   name?: string;
-}
+};
 
 /** `people` empty: every `person` entity. */
-export interface NormalizedPresence {
+export type NormalizedPresence = {
   people: PresenceConfig[];
-}
+};
 
 /** The strip can't tell more bands apart. */
 export const MAX_CONTEXT = 4;
 
-export interface CameraOverride {
+export type CameraOverride = {
   clip?: "auto" | "preview";
   name?: string;
-}
+};
 
-export interface CardConfig {
+export type CardConfig = {
   type: string;
   title?: string;
   density?: "compact" | "comfortable";
@@ -100,9 +100,9 @@ export interface CardConfig {
   context?: (string | ContextConfig)[];
   /** Who was home at each row, and a flag when nobody was: `true` for every person. */
   presence?: boolean | (string | PresenceConfig)[];
-}
+};
 
-export interface NormalizedConfig {
+export type NormalizedConfig = {
   title: string;
   density: "compact" | "comfortable";
   range: RangeSpec;
@@ -125,7 +125,7 @@ export interface NormalizedConfig {
   context: NormalizedContext[];
   /** Undefined when presence is off (the default). */
   presence?: NormalizedPresence;
-}
+};
 
 function toggle(value: unknown): ProviderToggle {
   if (value === undefined || value === null) return { enabled: true, explicit: false };

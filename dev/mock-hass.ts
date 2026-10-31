@@ -2,12 +2,12 @@ import type { HassEntity, HomeAssistant } from "../src/ha-types";
 
 export type WsHandler = (msg: Record<string, unknown>) => unknown | Promise<unknown>;
 
-export interface MockOptions {
+export type MockOptions = {
   language: string;
   darkMode: boolean;
   states: Record<string, HassEntity>;
   handlers: Record<string, WsHandler>;
-}
+};
 
 // A small stand-in for HA's translated state names.
 const STATE_NAMES: Record<string, Record<string, string>> = {

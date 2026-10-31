@@ -7,14 +7,14 @@ import { itemEvents, primaryCategory } from "./filters";
 import type { TimelineItem } from "./grouping";
 import { hourStart, zonedParts } from "./time";
 
-export interface StripTick {
+export type StripTick = {
   id: string;
   /** 0..1 across the range. */
   pos: number;
   category: Category;
-}
+};
 
-export interface StripModel {
+export type StripModel = {
   ticks: StripTick[];
   /** Event counts per bucket, oldest first. */
   buckets: number[];
@@ -22,15 +22,15 @@ export interface StripModel {
   marks: { pos: number; epoch: number }[];
   /** Context band spans (§5.6); `lane` is the band's index, for its edge at the top. */
   bands: StripBand[];
-}
+};
 
-export interface StripBand {
+export type StripBand = {
   lane: number;
   /** 0..1 across the range. */
   pos: number;
   width: number;
   color: string;
-}
+};
 
 const clamp = (x: number) => Math.min(1, Math.max(0, x));
 

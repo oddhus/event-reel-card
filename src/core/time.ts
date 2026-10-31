@@ -19,14 +19,14 @@ export function parseRange(value: unknown): RangeSpec {
   return parseRangeStrict(value) ?? { kind: "rolling", hours: 24 };
 }
 
-interface ZonedParts {
+type ZonedParts = {
   year: number;
   month: number;
   day: number;
   hour: number;
   minute: number;
   second: number;
-}
+};
 
 const partsFormatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -125,14 +125,14 @@ export function browserTimeZone(): string {
   return (browserZone ??= Intl.DateTimeFormat().resolvedOptions().timeZone);
 }
 
-export interface TimeFormatOptions {
+export type TimeFormatOptions = {
   language: string;
   timeZone: string;
   /** HA locale time_format: "12", "24", "language" or "system". */
   timeFormat?: string;
   /** The locale "system" takes its clock from; the browser's when undefined. */
   systemLocale?: string;
-}
+};
 
 const timeFormatters = new Map<string, Intl.DateTimeFormat>();
 

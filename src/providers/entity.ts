@@ -6,7 +6,7 @@ import { categoryForEntity } from "../core/categories";
 import type { HassEntity, HomeAssistant } from "../ha-types";
 import type { Provider, ProviderContext, ReelEvent, TimeRange } from "../types";
 
-export interface LogbookEntry {
+export type LogbookEntry = {
   when: number | string;
   entity_id?: string;
   state?: string;
@@ -16,25 +16,25 @@ export interface LogbookEntry {
   context_entity_id?: string;
   context_name?: string;
   context_event_type?: string;
-}
+};
 
 /** Compressed history row (`history/history_during_period`). */
-interface HistoryRow {
+type HistoryRow = {
   s: string;
   a?: Record<string, unknown>;
   lu: number;
   lc?: number;
-}
+};
 
 const INVALID = new Set(["unknown", "unavailable"]);
 
-export interface EntityHelpers {
+export type EntityHelpers = {
   name(entityId: string): string;
   stateLabel(entityId: string, state: string): string;
   deviceClass(entityId: string): unknown;
   /** Friendly name for a context entity (automation/script), if known. */
   contextName(entityId: string): string | undefined;
-}
+};
 
 const toEpoch = (when: number | string) =>
   typeof when === "number" ? when : Date.parse(when) / 1000;
@@ -160,18 +160,18 @@ const ACTOR_SETTLE = 30;
 /** Seconds after which a lookup that hasn't answered no longer holds back a new one. */
 const LOOKUP_STALE = 30;
 
-interface ActorLookup {
+type ActorLookup = {
   since: number;
   done: Promise<void>;
   /** The caller stopped waiting: tell the listeners when it finds actors. */
   late: boolean;
-}
+};
 
-interface ActorResult {
+type ActorResult = {
   actor?: string;
   /** The change was settled when the history was read, so it isn't asked for again. */
   final: boolean;
-}
+};
 
 /**
  * Remembers each change's actor and looks up only changes without a final answer, in the

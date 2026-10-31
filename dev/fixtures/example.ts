@@ -6,7 +6,7 @@ import type { FrigateReview, FrigateReviewMetadata } from "../../src/providers/f
 import type { EventReelRecord } from "../../src/providers/eventreel";
 import type { LlmVisionEvent } from "../../src/providers/llmvision";
 
-export interface ExampleData {
+export type ExampleData = {
   reviews: FrigateReview[];
   llmvision: LlmVisionEvent[];
   /** The same AI descriptions as the Event Reel integration stores them. */
@@ -14,7 +14,7 @@ export interface ExampleData {
   logbook: LogbookEntry[];
   history: Record<string, { s: string; a: Record<string, unknown>; lu: number }[]>;
   nestToken: string;
-}
+};
 
 const iso = (epoch: number) => new Date(epoch * 1000).toISOString();
 const rid = (t: number, suffix: string) => `${t.toFixed(6)}-${suffix}`;

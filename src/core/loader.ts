@@ -2,7 +2,7 @@
 // the others, a request that runs past the deadline counts as failed, and answers that a
 // newer request or a reset replaced are dropped. Pure: no DOM or `hass` access.
 
-export interface LoaderHooks<T> {
+export type LoaderHooks<T> = {
   /** The answer to the current request for a key. */
   result(key: string, value: T): void;
   /** The current request for a key failed, or ran past the deadline (`"timeout"`). */
@@ -11,7 +11,7 @@ export interface LoaderHooks<T> {
   settled(key: string): void;
   /** A key was asked for while a request for it was running; load it once more now. */
   again(key: string): void;
-}
+};
 
 export class Loader<T> {
   private gen = 0;

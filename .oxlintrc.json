@@ -1,0 +1,280 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "oxc", "import", "unicorn"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "typescript/no-unnecessary-parameter-property-assignment": "off",
+    "typescript/no-misused-promises": [
+      "error",
+      {
+        "checksVoidReturn": {
+          "attributes": false
+        }
+      }
+    ],
+    "typescript/no-unnecessary-condition": [
+      "error",
+      {
+        "allowConstantLoopConditions": true
+      }
+    ],
+    "typescript/no-non-null-assertion": "error",
+    "typescript/dot-notation": "error",
+    "typescript/prefer-find": "error",
+    "typescript/prefer-regexp-exec": "error",
+    "typescript/prefer-string-starts-ends-with": "error",
+    "typescript/prefer-optional-chain": "error",
+    "typescript/prefer-nullish-coalescing": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-empty-function": "error",
+    "typescript/require-await": "error",
+    "typescript/promise-function-async": "off",
+    "typescript/non-nullable-type-assertion-style": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-unused-expressions": "error",
+    "typescript/consistent-type-definitions": ["warn", "type"],
+    "typescript/consistent-type-imports": [
+      "warn",
+      {
+        "prefer": "type-imports",
+        "fixStyle": "separate-type-imports"
+      }
+    ],
+    "typescript/array-type": "off",
+    "typescript/ban-types": "off",
+    "typescript/prefer-readonly": "off",
+    "typescript/no-duplicate-enum-values": "off",
+    "typescript/no-misused-spread": "error",
+    "typescript/no-meaningless-void-operator": "off",
+    "typescript/require-array-sort-compare": "error",
+    "no-constant-binary-expression": "error",
+    "typescript/no-redundant-type-constituents": "error",
+    "import/consistent-type-specifier-style": ["warn", "prefer-top-level"],
+    "import/no-cycle": "error",
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase",
+        "ignore": ["^[a-z]{2}-[A-Z]{2}\\."]
+      }
+    ],
+    "unicorn/no-await-in-promise-methods": "off",
+    "unicorn/no-empty-file": "off",
+    "unicorn/no-invalid-fetch-options": "off",
+    "unicorn/no-invalid-remove-event-listener": "off",
+    "unicorn/no-new-array": "off",
+    "unicorn/no-single-promise-in-promise-methods": "off",
+    "unicorn/no-thenable": "off",
+    "unicorn/no-unnecessary-await": "off",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "unicorn/no-useless-length-check": "off",
+    "unicorn/no-useless-spread": "off",
+    "unicorn/prefer-set-size": "off",
+    "unicorn/prefer-string-starts-ends-with": "off"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/coverage/**",
+    "**/node_modules/**",
+    ".agent/**",
+    ".agents/**",
+    ".claude/**",
+    ".codex/**",
+    ".continue/**",
+    ".cursor/**",
+    ".gemini/**",
+    ".opencode/**",
+    ".pi/**",
+    ".roo/**",
+    ".windsurf/**"
+  ],
+  "options": {
+    "typeAware": true
+  },
+  "overrides": [
+    {
+      "files": ["build/**", "test/**", "*.config.ts"],
+      "env": {
+        "node": true
+      }
+    },
+    {
+      "files": ["**/*.{js,mjs,cjs}"],
+      "rules": {
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-argument": "off"
+      }
+    },
+    {
+      "files": ["dev/main.ts", "src/providers/entity.ts"],
+      "rules": {
+        "typescript/no-base-to-string": "off"
+      }
+    },
+    {
+      "files": ["src/providers/eventreel.ts", "src/providers/frigate.ts"],
+      "rules": {
+        "typescript/no-floating-promises": "off"
+      }
+    },
+    {
+      "files": [
+        "dev/main.ts",
+        "src/core/filters.ts",
+        "src/core/media.ts",
+        "src/core/merge.ts",
+        "src/core/presence.ts",
+        "src/event-reel-card.ts",
+        "src/providers/entity.ts",
+        "src/ui/detail.ts",
+        "src/ui/list.ts",
+        "src/ui/player.ts",
+        "src/ui/preview.ts",
+        "test/providers.test.ts",
+        "test/third-party-notices.test.ts"
+      ],
+      "rules": {
+        "typescript/no-non-null-assertion": "off"
+      }
+    },
+    {
+      "files": ["dev/mock-hass.ts", "src/config.ts"],
+      "rules": {
+        "typescript/no-redundant-type-constituents": "off"
+      }
+    },
+    {
+      "files": [
+        "dev/main.ts",
+        "dev/mock-hass.ts",
+        "src/config.ts",
+        "src/core/cameras.ts",
+        "src/core/capabilities.ts",
+        "src/core/context.ts",
+        "src/core/grouping.ts",
+        "src/editor-model.ts",
+        "src/editor.ts",
+        "src/event-reel-card.ts",
+        "src/i18n/index.ts",
+        "src/providers/entity.ts",
+        "src/providers/llmvision.ts",
+        "src/ui/player.ts",
+        "src/ui/preview.ts",
+        "src/ui/strip.ts",
+        "vite.dev.config.ts"
+      ],
+      "rules": {
+        "typescript/no-unnecessary-condition": "off"
+      }
+    },
+    {
+      "files": ["test/third-party-notices.test.ts"],
+      "rules": {
+        "typescript/no-unsafe-argument": "off"
+      }
+    },
+    {
+      "files": ["test/third-party-notices.test.ts"],
+      "rules": {
+        "typescript/no-unsafe-assignment": "off"
+      }
+    },
+    {
+      "files": ["test/third-party-notices.test.ts"],
+      "rules": {
+        "typescript/no-unsafe-call": "off"
+      }
+    },
+    {
+      "files": ["test/eventreel.test.ts", "test/third-party-notices.test.ts"],
+      "rules": {
+        "typescript/no-unsafe-member-access": "off"
+      }
+    },
+    {
+      "files": ["src/event-reel-card.ts"],
+      "rules": {
+        "typescript/no-unsafe-return": "off"
+      }
+    },
+    {
+      "files": ["dev/mock-hass.ts"],
+      "rules": {
+        "typescript/only-throw-error": "off"
+      }
+    },
+    {
+      "files": [
+        "dev/main.ts",
+        "src/core/cameras.ts",
+        "src/core/context.ts",
+        "src/core/deeplink.ts",
+        "src/core/presence.ts",
+        "src/event-reel-card.ts",
+        "src/i18n/index.ts",
+        "src/providers/entity.ts",
+        "src/providers/eventreel.ts",
+        "src/providers/frigate.ts",
+        "src/providers/llmvision.ts",
+        "src/ui/detail.ts",
+        "src/ui/list.ts"
+      ],
+      "rules": {
+        "typescript/prefer-nullish-coalescing": "off"
+      }
+    },
+    {
+      "files": ["test/m2.test.ts"],
+      "rules": {
+        "typescript/require-array-sort-compare": "off"
+      }
+    },
+    {
+      "files": [
+        "dev/mock-hass.ts",
+        "test/media.test.ts",
+        "test/nest.test.ts",
+        "test/providers.test.ts"
+      ],
+      "rules": {
+        "typescript/require-await": "off"
+      }
+    },
+    {
+      "files": ["dev/mock-hass.ts", "test/media.test.ts"],
+      "rules": {
+        "typescript/restrict-template-expressions": "off"
+      }
+    },
+    {
+      "files": ["src/editor.ts", "src/ui/player.ts", "src/ui/preview.ts"],
+      "rules": {
+        "typescript/unbound-method": "off"
+      }
+    }
+  ]
+}
