@@ -237,4 +237,49 @@ describe("phone width", () => {
       await page.viewport(1024, 900);
     }
   });
+
+  test("at 320 px titles clamp at 2 lines, a burst at 3, and an opened row shows all", async () => {
+    const m = await mount({ width: 320 });
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    await m.card.updateComplete;
+    const rowWith = (text: string) =>
+      must(
+        rows(m).find((r) => r.textContent.includes(text)),
+        text,
+      );
+    // One line: the height of a short title (Alex coming home).
+    const line = must(rowWith("Alex").querySelector<HTMLElement>(".title")).clientHeight;
+    const lines = (el: HTMLElement) => Math.round(el.clientHeight / line);
+    // "Front door: Unlocked ×5 · Open · Closed · Locked" needs four lines here.
+    const burst = must(rowWith("Unlocked ×5").querySelector<HTMLElement>(".title"));
+    expect(lines(burst)).toBe(3);
+    expect(burst.scrollHeight).toBeGreaterThan(burst.clientHeight);
+    // "Unfamiliar car waits in the driveway" needs three.
+    const carRow = rowWith("Unfamiliar car waits in the driveway");
+    const car = must(carRow.querySelector<HTMLElement>(".title"));
+    expect(lines(car)).toBe(2);
+    expect(car.scrollHeight).toBeGreaterThan(car.clientHeight);
+
+    // Opened, the row shows the whole title.
+    await userEvent.click(carRow);
+    await m.card.updateComplete;
+    expect(car.scrollHeight).toBeLessThanOrEqual(car.clientHeight + 1);
+    expect(lines(car)).toBeGreaterThanOrEqual(3);
+  });
+
+  test("comfortable keeps its big preview in a narrow card, and takes the small one on a phone", async () => {
+    const thumb = async (width: number) => {
+      const m = await mount({ width, config: { density: "comfortable" } });
+      await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+      await m.card.updateComplete;
+      const t = must(root(m).querySelector<HTMLElement>(".row.camera .thumb"), "thumbnail");
+      const r = t.getBoundingClientRect();
+      m.remove();
+      mounted = undefined;
+      return [Math.round(r.width), Math.round(r.height)];
+    };
+    // PLAN §5.2: comfortable is 112×63; on a phone, compact's 64×36.
+    expect(await thumb(440)).toEqual([112, 63]);
+    expect(await thumb(375)).toEqual([64, 36]);
+  });
 });

@@ -218,11 +218,26 @@ export const styles = css`
     flex-direction: column;
     min-width: 0;
   }
+  /* A long title wraps rather than being cut after a few words: up to 2 lines for an
+     event, 3 for a door's chain of changes. A short title stays one line, so a row only
+     grows when its title needs the room, and an opened row shows the whole title. */
   .title {
     overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     font-size: 0.95em;
+  }
+  .row.burst .title {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+  .row[aria-expanded="true"] .title {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: none;
   }
   .state {
     color: var(--secondary-text-color);
@@ -330,14 +345,18 @@ export const styles = css`
     font-size: 1em;
   }
 
-  @container (max-width: 480px) {
-    /* Comfortable keeps its description line but takes compact's thumbnail, which leaves
-       the title column room for two lines. */
+  /* On a phone, comfortable keeps its description line but takes compact's thumbnail,
+     which leaves the title column room. A wider narrow card (a sections view column on a
+     desktop) keeps the big preview. */
+  @container (max-width: 400px) {
     .list.comfortable {
       --reel-slot-width: 64px;
       --reel-thumb-height: 36px;
       --reel-row-camera: 44px;
     }
+  }
+
+  @container (max-width: 480px) {
     .row {
       gap: 8px;
       padding: 4px 10px 4px 12px;
@@ -352,21 +371,6 @@ export const styles = css`
     }
     .sub {
       display: block;
-    }
-    /* A phone's title column is narrow: let titles wrap instead of cutting them off after a
-       few words. Event titles take up to 2 lines, a door's chain of changes up to 3; a row
-       only grows when its title needs the room. */
-    .title {
-      white-space: normal;
-      overflow-wrap: anywhere;
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      line-clamp: 2;
-    }
-    .row.burst .title {
-      -webkit-line-clamp: 3;
-      line-clamp: 3;
     }
     /* The threat badge moves to the camera/duration line, so the title stays readable. */
     .title .badge.threat-1,
