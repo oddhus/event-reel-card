@@ -205,4 +205,36 @@ describe("phone width", () => {
       await page.viewport(1024, 900);
     }
   });
+
+  test("at 375 px a door burst and a long AI title read in full (PLAN §5.2)", async () => {
+    await page.viewport(375, 800);
+    try {
+      const m = await mount({ parent: document.body });
+      await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+      await m.card.updateComplete;
+      const titleOf = (pred: (r: HTMLElement) => boolean, what: string) =>
+        must(rows(m).find(pred)?.querySelector<HTMLElement>(".title"), what);
+      // The example day has a four-step front door burst and an AI title of 36 characters;
+      // at this width neither fits on one line (presence is on, so the title column is narrow).
+      const burst = titleOf(
+        (r) => (r.dataset.id ?? "").startsWith("burst:") && r.textContent.includes("Front door"),
+        "burst title",
+      );
+      const car = titleOf(
+        (r) => r.textContent.includes("Unfamiliar car waits in the driveway"),
+        "AI title",
+      );
+      for (const title of [burst, car]) {
+        expect(title.getClientRects().length, "rendered").toBeGreaterThan(0);
+        // Nothing hidden sideways or below the line clamp.
+        expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth + 1);
+        expect(title.scrollHeight).toBeLessThanOrEqual(title.clientHeight + 1);
+        // And it really wrapped: more than one line.
+        const line = parseFloat(getComputedStyle(title).lineHeight) || 20;
+        expect(title.clientHeight).toBeGreaterThan(line * 1.5);
+      }
+    } finally {
+      await page.viewport(1024, 900);
+    }
+  });
 });
