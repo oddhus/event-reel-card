@@ -690,7 +690,7 @@ Later:
   row's time (§5.6).
 
 **Comfortable:** about 72 px, a 112×63 preview, and a two-line description. On a phone (a
-screen up to 600 px wide, a media query) or in a card under 400 px, the preview is
+screen up to 600 px wide, a media query) or in a card up to 400 px wide, the preview is
 compact's 64×36 and the row keeps its height, which leaves the title column room. Between
 400 and 480 px the card's own width can't decide: a large phone and a sections view column
 on a desktop both give such a card, and the desktop column keeps the big preview.

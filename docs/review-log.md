@@ -213,3 +213,23 @@ Not changed: the note counts only fetched events, so it can't report events past
 provider's fetch limit. The recompute now groups and stabilizes every in-range event
 instead of the newest `max_events`; merging already handled all of them, and only noisy
 entities over long ranges would notice.
+
+**2026-11-14, readable titles at phone width.** Three rounds with a fresh Claude (Fable 5.2)
+context and GPT-6-sol (xhigh), each on the fixes of the round before. Changes:
+- The first version wrapped titles only in cards up to 480 px. At 481 px they were cut
+  again, and the meta column came back with them: the title kept 129 px (81 px in
+  comfortable density with presence). Titles now wrap at every width, clamped at 2 lines
+  (3 for a burst), an opened row shows all of it, and the camera/duration line goes under
+  the title in cards up to 600 px (§5.2), where the column-free layout gives the title
+  about as much room as the column layout does above.
+- Comfortable's small thumbnail: a 480 px container rule took the big preview from a
+  sections view column on a desktop, and a 400 px one missed large phones (a card of about
+  414 px). It now follows the screen (`@media (max-width: 600px)`) or a card up to 400 px;
+  between 400 and 480 px the card's own width can't tell a large phone from a desktop
+  column. Comfortable rows keep their 72 px height with the small thumbnail.
+- The tests didn't cover the clamp, comfortable density or the camera line under the
+  title; each now has a browser test that fails without its rule. The README screenshots
+  `mobile-dark.png` and `details.png` were retaken from the harness.
+
+Not changed: `docs/demo.gif` (540 px) still shows the camera column; retake it with the
+next recording. WebKit was checked by GPT only (Playwright's WebKit on Windows).

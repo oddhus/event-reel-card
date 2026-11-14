@@ -309,11 +309,23 @@ describe("phone width", () => {
         await m.card.updateComplete;
         const titles = rows(m).map((r) => must(r.querySelector<HTMLElement>(".title")).clientWidth);
         expect(Math.min(...titles), `${density} at ${width} px`).toBeGreaterThanOrEqual(180);
-        const meta = must(root(m).querySelector<HTMLElement>(".row.camera .meta"));
+        const row = must(root(m).querySelector<HTMLElement>(".row.camera"));
+        const meta = must(row.querySelector<HTMLElement>(".meta"));
         expect(getComputedStyle(meta).display).toBe("none");
+        // The camera and duration show under the title instead.
+        const sub = must(row.querySelector<HTMLElement>(".sub"), "camera line");
+        expect(getComputedStyle(sub).display).not.toBe("none");
+        expect(sub.textContent).toBe(meta.textContent);
+        expect(sub.textContent.trim()).not.toBe("");
         m.remove();
         mounted = undefined;
       }
     }
+    // Above 600 px the column is back.
+    const wide = await mount({ width: 601 });
+    await until(() => ids(wide).some((id) => id.startsWith("frigate:")));
+    await wide.card.updateComplete;
+    const meta = must(root(wide).querySelector<HTMLElement>(".row.camera .meta"));
+    expect(getComputedStyle(meta).display).not.toBe("none");
   });
 });

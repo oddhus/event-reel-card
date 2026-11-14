@@ -345,7 +345,7 @@ export const styles = css`
     font-size: 1em;
   }
 
-  /* On a phone, or in any card under 400 px, comfortable keeps its description line and row
+  /* On a phone, or in any card up to 400 px, comfortable keeps its description line and row
      height but takes compact's thumbnail, which leaves the title column room. Between 400
      and 480 px the card's width can't tell a large phone from a sections view column on a
      desktop, so the screen decides: the desktop column keeps the big preview. */
