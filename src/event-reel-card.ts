@@ -958,8 +958,13 @@ export class EventReelCard extends LitElement {
   private _followAttached(items: TimelineItem[]) {
     const hostOf = (id: string) =>
       items.find((i) => attachedEvents(i).some((e) => e.id === id || !!e.aliases?.includes(id)));
-    const open = (host: TimelineItem) => {
+    // A burst's row may take the one open detail only when none is open and the filter shows
+    // it: a refresh must not close the clip being watched, or open a row the filter hides.
+    const shown = (host: TimelineItem) =>
+      this._visible(this._filter, items).list.some((i) => i.id === host.id);
+    const open = (host: TimelineItem, takeDetail = true) => {
       if (host.kind === "event") {
+        if (!takeDetail && (this._openId !== undefined || !shown(host))) return false;
         const already = this._openId === host.event.id;
         this._openId = host.event.id;
         return !already;
@@ -998,9 +1003,10 @@ export class EventReelCard extends LitElement {
       this._openGroups = groups;
       for (const e of moved) {
         const host = hostOf(e.id);
-        if (host) open(host);
+        if (host) open(host, false);
       }
-      this._reach = moved[0].id;
+      // Keep the row listed under `max_events`, unless something else is already reached.
+      this._reach ??= moved[0].id;
     }
     // A deep-linked step: open its row and bring it into view the first time it is on one.
     // After that, closing the row sticks, even when the row's id changes.
@@ -1126,11 +1132,14 @@ export class EventReelCard extends LitElement {
   }
 
   private _toggle(id: string) {
+    // The user chose what to look at: a pending deep link no longer moves the view.
+    this._linkedFollowed = true;
     this._openId = this._openId === id ? undefined : id;
     if (this._openId) this._reach = id;
   }
 
   private _toggleGroup(id: string) {
+    this._linkedFollowed = true;
     const next = new Set(this._openGroups);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -1284,7 +1293,7 @@ export class EventReelCard extends LitElement {
   }
 
   /** The rows the list shows for a filter: filtered, then capped (§5.1). */
-  private _visible(filter = this._filter) {
+  private _visible(filter = this._filter, items = this._items) {
     // A picked band the config no longer has is ignored, so it can't hide every row.
     const picked = this._bands.filter((b) => filter.bands?.has(b.key));
     const presence = this._presence;
@@ -1296,7 +1305,7 @@ export class EventReelCard extends LitElement {
       filter.nobodyHome && presence ? (e) => whileNobodyHome(presence, e) : undefined,
     );
     return visibleRows(
-      this._items,
+      items,
       filter,
       this._config!.maxEvents,
       (item) => allItemEvents(item).some((e) => this._isReached(e)),
@@ -1309,6 +1318,7 @@ export class EventReelCard extends LitElement {
    * closed, so it doesn't open again (with its media) when the filter is switched off.
    */
   private _setFilter(next: FilterState) {
+    this._linkedFollowed = true;
     this._filter = next;
     const open = this._openId;
     if (!open) return;
