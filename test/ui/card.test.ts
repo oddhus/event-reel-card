@@ -110,42 +110,54 @@ describe("rows", () => {
 });
 
 describe("filters (PLAN §5.1)", () => {
+  const chip = (m: Mounted, label: string) =>
+    must(
+      [...root(m).querySelectorAll<HTMLElement>(".fchip:not(.bandchip)")].find((c) =>
+        c.textContent.includes(label),
+      ),
+      `${label} chip`,
+    );
+
   test("a category chip narrows the list to that category and is pressed", async () => {
     const m = await mount();
     await until(() => ids(m).some((id) => id.startsWith("frigate:")));
     const all = items(m).length;
-    const chips = [...root(m).querySelectorAll<HTMLElement>(".fchip:not(.bandchip)")];
-    const chip = must(
-      chips.find((c) => c.textContent.includes(en["category.door"])),
-      "Doors chip",
-    );
-    const count = Number(chip.querySelector(".n")?.textContent);
-    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    const doorbell = chip(m, en["category.doorbell"]);
+    expect(doorbell.getAttribute("aria-pressed")).toBe("false");
 
-    await userEvent.click(chip);
+    // The example day has one doorbell ring, described by LLM Vision.
+    await userEvent.click(doorbell);
     await m.card.updateComplete;
-    expect(chip.getAttribute("aria-pressed")).toBe("true");
-    // The example day has three visits at the front door, each a burst of lock and door
-    // changes. Nothing else is a door: not Alex coming and going, not the cameras.
-    expect(count).toBe(3);
-    expect(items(m)).toHaveLength(3);
-    expect(count).toBeLessThan(all);
-    for (const r of rows(m)) expect(r.dataset.id).toMatch(/^burst:entity:/);
+    expect(doorbell.getAttribute("aria-pressed")).toBe("true");
+    expect(ids(m)).toEqual(["llmvision:ex-4"]);
+    expect(doorbell.querySelector(".n")?.textContent).toBe("1");
 
-    await userEvent.click(chip);
+    // Off again: every row is back.
+    await userEvent.click(doorbell);
     await m.card.updateComplete;
-    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    expect(doorbell.getAttribute("aria-pressed")).toBe("false");
     expect(items(m).length).toBe(all);
+
+    // People: the camera rows with a person, never Alex's own comings and goings.
+    await userEvent.click(chip(m, en["category.person"]));
+    await m.card.updateComplete;
+    expect(ids(m).length).toBeGreaterThan(0);
+    for (const id of ids(m)) expect(id).toMatch(/^(frigate|llmvision):/);
   });
 });
 
 describe("day navigation (PLAN §5.1, §3.7)", () => {
   test("‹ shows Yesterday and never the live range's rows under it", async () => {
-    const m = await mount({ slow: { frigate: 2, llmvision: 2 } });
-    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
     // Every row of the live view starts today: the example data spans the last 15 hours.
-    const live = new Set(ids(m));
-    expect(live.size).toBeGreaterThan(0);
+    const first = await mount();
+    await until(() => ids(first).some((id) => id.startsWith("frigate:")));
+    const live = new Set(ids(first));
+    first.remove();
+
+    // Frigate and LLM Vision still loading the live range when ‹ is clicked.
+    const m = await mount({ slow: { frigate: 3, llmvision: 3 } });
+    await until(() => ids(m).some((id) => id.startsWith("entity:") || id.startsWith("burst:")));
+    expect(ids(m).some((id) => id.startsWith("frigate:"))).toBe(false);
 
     const seen = new Set<string>();
     const record = () => ids(m).forEach((id) => seen.add(id));
@@ -157,12 +169,13 @@ describe("day navigation (PLAN §5.1, §3.7)", () => {
     record();
     expect(root(m).querySelector(".daylabel")?.textContent.trim()).toBe(en["nav.yesterday"]);
 
-    // Wait for every source (2 s), then a little longer.
-    await sleep(2600);
+    // The live answers arrive at 3 s and must be dropped; yesterday's own requests start
+    // after them and take 3 s more.
+    await until(() => status(m) === en["empty.yesterday"], 9000);
+    await sleep(300);
     record();
     observer.disconnect();
     expect([...seen].filter((id) => live.has(id))).toEqual([]);
-    expect(status(m)).toBe(en["empty.yesterday"]);
   });
 });
 

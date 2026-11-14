@@ -971,7 +971,8 @@ can already shade "away mode", but not say who, and a template can't read past s
   "render_readme": true, "homeassistant": "<min>" }`. Set the minimum HA version from
   the APIs actually used (`getConfigForm`, `formatEntityState`, `getGridOptions`).
 - GitHub Actions:
-  - `ci.yml`: on push/PR, run `npm ci && npm run lint && npm test && npm run build`, and
+  - `ci.yml`: on push/PR, run `npm ci && npm run lint && npm test && npm run build`, the
+    browser smoke tests (`npm run test:ui`) in a job of their own, and
     the HACS Action (`hacs/action@main`, category `plugin`, as HACS documents it).
   - `release.yml`: on tag `v*`, build and attach `dist/event-reel-card.js` to the GitHub
     release.

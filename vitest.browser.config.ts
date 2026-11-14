@@ -7,6 +7,8 @@ export default defineConfig({
   define: { __VERSION__: JSON.stringify("test") },
   test: {
     include: ["test/ui/**/*.test.ts"],
+    // Some tests wait out a slow source on the real clock.
+    testTimeout: 20000,
     browser: {
       enabled: true,
       // The example day and the day buttons depend on the time zone; pin it so a test run
