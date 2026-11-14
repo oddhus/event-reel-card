@@ -333,6 +333,8 @@ export class EventReelCard extends LitElement {
     window.addEventListener("popstate", this._readDeepLink);
     this._readDeepLink();
     this._maybeStart();
+    // Moved in the page (edit mode, a sections drag): watch the chip bar again.
+    if (this.hasUpdated) this.requestUpdate();
   }
 
   override disconnectedCallback() {
@@ -1236,9 +1238,10 @@ export class EventReelCard extends LitElement {
   }
 
   /**
-   * Marks the ends of the chip bar that have more chips out of view (`more-start`,
-   * `more-end`), for the edge fade that shows the bar scrolls. Its chips change on render,
-   * its scroll position on scroll, and its width on resize.
+   * Marks the sides of the chip bar that have more chips out of view (`more-left`,
+   * `more-right`), for the edge fade that shows the bar scrolls. Its chips change on render,
+   * its scroll position on scroll, and its width or a chip's width (an icon that loads late)
+   * on resize.
    */
   private _watchChipbar() {
     const el = this.renderRoot.querySelector<HTMLElement>(".chipbar") ?? undefined;
@@ -1246,16 +1249,22 @@ export class EventReelCard extends LitElement {
       this._unwatchChipbar();
       if (!el) return;
       const update = () => {
-        const edges = scrollEdges(el.scrollLeft, el.clientWidth, el.scrollWidth);
-        el.classList.toggle("more-start", edges.start);
-        el.classList.toggle("more-end", edges.end);
+        const rtl = getComputedStyle(el).direction === "rtl";
+        const edges = scrollEdges(el.scrollLeft, el.clientWidth, el.scrollWidth, rtl);
+        el.classList.toggle("more-left", edges.left);
+        el.classList.toggle("more-right", edges.right);
       };
       const observer = new ResizeObserver(update);
-      observer.observe(el);
       el.addEventListener("scroll", update, { passive: true });
       this._chipbar = { el, observer, onScroll: update };
     }
-    this._chipbar?.onScroll();
+    // The chips may have changed: observe the bar and each chip again.
+    const watch = this._chipbar;
+    if (!watch) return;
+    watch.observer.disconnect();
+    watch.observer.observe(watch.el);
+    for (const chip of watch.el.children) watch.observer.observe(chip);
+    watch.onScroll();
   }
 
   private _unwatchChipbar() {

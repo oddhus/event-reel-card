@@ -337,8 +337,8 @@ describe("phone width", () => {
       await m.card.updateComplete;
       const bar = must(root(m).querySelector<HTMLElement>(".chipbar"), "chip bar");
       const faded = () => [
-        bar.classList.contains("more-start"),
-        bar.classList.contains("more-end"),
+        bar.classList.contains("more-left"),
+        bar.classList.contains("more-right"),
       ];
       // The example day has more chips than fit: more to the right at first …
       expect(bar.scrollWidth).toBeGreaterThan(bar.clientWidth);
@@ -363,6 +363,33 @@ describe("phone width", () => {
       expect(wrap.getBoundingClientRect().width).toBeGreaterThan(60);
       expect(getComputedStyle(select).opacity).toBe("1");
     } finally {
+      await page.viewport(1024, 900);
+    }
+  });
+
+  test("right to left, the fade is on the left, where the hidden chips are", async () => {
+    await page.viewport(375, 800);
+    const parent = document.createElement("div");
+    parent.dir = "rtl";
+    document.body.appendChild(parent);
+    try {
+      const m = await mount({ parent });
+      await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+      await m.card.updateComplete;
+      const bar = must(root(m).querySelector<HTMLElement>(".chipbar"), "chip bar");
+      const faded = () => [
+        bar.classList.contains("more-left"),
+        bar.classList.contains("more-right"),
+      ];
+      expect(getComputedStyle(bar).direction).toBe("rtl");
+      await until(() => faded()[0]);
+      expect(faded()).toEqual([true, false]);
+      // Scrolled to the far end (the left), only the right has more.
+      bar.scrollLeft = -bar.scrollWidth;
+      await until(() => !faded()[0]);
+      expect(faded()).toEqual([false, true]);
+    } finally {
+      parent.remove();
       await page.viewport(1024, 900);
     }
   });

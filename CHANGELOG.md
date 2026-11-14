@@ -8,8 +8,8 @@ All notable changes to this project are documented here. The project uses
 ### Changed
 
 - The filter chips fade at the edge where more of them are out of view, so it shows that
-  the row scrolls. On a phone the camera menu is an icon until you pick a camera, which
-  leaves the chips more room.
+  the row scrolls. In a narrow card (up to 600 px wide, such as on a phone or in a sections
+  column) the camera menu is an icon until you pick a camera, which leaves the chips more room.
 
 ### Fixed
 

@@ -523,6 +523,8 @@ export const styles = css`
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
+    /* A chip reached with Tab stops clear of the edge fade. */
+    scroll-padding-inline: 28px;
   }
   .chipbar::-webkit-scrollbar {
     display: none;
@@ -569,15 +571,15 @@ export const styles = css`
     display: none;
   }
   /* More chips out of view: fade the bar's edge on that side, so it reads as scrollable. */
-  .chipbar.more-end {
+  .chipbar.more-right {
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
     mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   }
-  .chipbar.more-start {
+  .chipbar.more-left {
     -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
     mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
   }
-  .chipbar.more-start.more-end {
+  .chipbar.more-left.more-right {
     -webkit-mask-image: linear-gradient(
       to right,
       transparent,
