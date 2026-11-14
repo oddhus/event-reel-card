@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "lint": "oxlint . --deny-warnings --report-unused-disable-directives-severity=error && tsc --noEmit",
     "format": "prettier --write .",
-    "lint:fix": "oxlint --fix ."
+    "lint:fix": "oxlint --fix .",
+    "test:ui": "vitest run --config vitest.browser.config.ts"
   },
   "dependencies": {
     "hls.js": "^1.7.3",
@@ -21,8 +22,10 @@
   "devDependencies": {
     "@mdi/js": "^7.4.47",
     "@types/node": "^26.6.3",
+    "@vitest/browser-playwright": "^5.0.2",
     "oxlint": "1.89.0",
     "oxlint-tsgolint": "7.0.2004",
+    "playwright": "^1.64.1",
     "prettier": "^3.9.9",
     "typescript": "^6.0.3",
     "vite": "^8.3.1",

@@ -146,7 +146,9 @@ agreed scope, this guide and [AGENTS.md](AGENTS.md). Say in the PR who reviewed 
 Explain how you established the problem and how you checked the change. Record the
 commands and manual checks you ran, the results and anything you could not check.
 
-- `npm run lint`, `npm test` and `npm run build` pass. CI runs the same.
+- `npm run lint`, `npm test`, `npm run test:ui` and `npm run build` pass. CI runs the same.
+  `npm run test:ui` runs the browser smoke tests in Chromium; install it once with
+  `npx playwright install chromium`.
 - Behavior changes include tests that follow [AGENTS.md](AGENTS.md#tests).
 - UI changes are checked in the dev harness, in light and dark themes and at phone width
   (375 px). Changes to media playback, URL signing, live updates or the visual editor
