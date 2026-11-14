@@ -395,6 +395,13 @@ export const styles = css`
       outline: 2px solid var(--primary-color);
       outline-offset: 2px;
     }
+    /* Without :has() (Firefox ESR 115), any focus shows the ring. */
+    @supports not selector(:has(*)) {
+      .camwrap:not(.picked):focus-within {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+      }
+    }
     .row {
       gap: 8px;
       padding: 4px 10px 4px 12px;
