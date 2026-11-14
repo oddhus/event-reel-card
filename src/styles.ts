@@ -345,14 +345,14 @@ export const styles = css`
     font-size: 1em;
   }
 
-  /* On a phone, comfortable keeps its description line but takes compact's thumbnail,
-     which leaves the title column room. A wider narrow card (a sections view column on a
-     desktop) keeps the big preview. */
-  @container (max-width: 400px) {
+  /* On a phone, comfortable keeps its description line and row height but takes compact's
+     thumbnail, which leaves the title column room. The screen tells a phone from a narrow
+     card on a desktop (a sections view column), which keeps the big preview: both can be
+     400–480 px wide. */
+  @media (max-width: 600px) {
     .list.comfortable {
       --reel-slot-width: 64px;
       --reel-thumb-height: 36px;
-      --reel-row-camera: 44px;
     }
   }
 

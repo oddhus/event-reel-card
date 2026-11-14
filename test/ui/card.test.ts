@@ -267,19 +267,30 @@ describe("phone width", () => {
     expect(lines(car)).toBeGreaterThanOrEqual(3);
   });
 
-  test("comfortable keeps its big preview in a narrow card, and takes the small one on a phone", async () => {
-    const thumb = async (width: number) => {
-      const m = await mount({ width, config: { density: "comfortable" } });
+  test("comfortable keeps its big preview in a narrow card on a desktop, the small one on a phone", async () => {
+    const measure = async () => {
+      const m = await mount({ width: 440, config: { density: "comfortable" } });
       await until(() => ids(m).some((id) => id.startsWith("frigate:")));
       await m.card.updateComplete;
-      const t = must(root(m).querySelector<HTMLElement>(".row.camera .thumb"), "thumbnail");
-      const r = t.getBoundingClientRect();
+      const row = must(root(m).querySelector<HTMLElement>(".row.camera"), "camera row");
+      const t = must(row.querySelector<HTMLElement>(".thumb"), "thumbnail").getBoundingClientRect();
+      const out = {
+        thumb: [Math.round(t.width), Math.round(t.height)],
+        minHeight: getComputedStyle(row).minHeight,
+      };
       m.remove();
       mounted = undefined;
-      return [Math.round(r.width), Math.round(r.height)];
+      return out;
     };
-    // PLAN §5.2: comfortable is 112×63; on a phone, compact's 64×36.
-    expect(await thumb(440)).toEqual([112, 63]);
-    expect(await thumb(375)).toEqual([64, 36]);
+    // PLAN §5.2: comfortable is 112×63 with 72 px rows. A 440 px card on a desktop screen
+    // (a sections view column) keeps that; on a phone the thumbnail is compact's 64×36 and
+    // the row keeps its height.
+    expect(await measure()).toEqual({ thumb: [112, 63], minHeight: "72px" });
+    await page.viewport(440, 900);
+    try {
+      expect(await measure()).toEqual({ thumb: [64, 36], minHeight: "72px" });
+    } finally {
+      await page.viewport(1024, 900);
+    }
   });
 });

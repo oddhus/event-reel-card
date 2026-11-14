@@ -687,9 +687,11 @@ Later:
 - Context highlight (P2, done): a left edge colored by the context band covering the
   row's time (§5.6).
 
-**Comfortable:** about 72 px, a 112×63 preview, and a two-line description. In a card up to
-400 px wide (a phone) the preview is compact's 64×36, which leaves the title column room;
-a sections view column on a desktop, often 401–480 px, keeps the big preview.
+**Comfortable:** about 72 px, a 112×63 preview, and a two-line description. On a phone (a
+screen up to 600 px wide, a media query) the preview is compact's 64×36 and the row keeps
+its height, which leaves the title column room. The card's own width can't decide this: a
+large phone and a sections view column on a desktop both give a card of 400–480 px, and
+the desktop column keeps the big preview.
 
 ### 5.3 Grouping (`core/grouping.ts`, pure)
 
