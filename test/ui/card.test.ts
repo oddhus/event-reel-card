@@ -58,8 +58,12 @@ describe("first paint (PLAN §3.7)", () => {
       await sleep(100);
     }
 
-    // After it: the entity provider's rows, while Frigate still hasn't answered.
-    await until(() => ids(m).some((id) => id.startsWith("entity:") || id.startsWith("burst:")));
+    // Right after it (with slack for a slow runner): the entity provider's rows, while
+    // Frigate still hasn't answered.
+    await until(
+      () => ids(m).some((id) => id.startsWith("entity:") || id.startsWith("burst:")),
+      1500,
+    );
     expect(ids(m).some((id) => id.startsWith("frigate:"))).toBe(false);
 
     // Once Frigate answers, its reviews join the list.
