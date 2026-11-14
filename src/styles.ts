@@ -391,7 +391,7 @@ export const styles = css`
       opacity: 0;
       cursor: pointer;
     }
-    .camwrap:not(.picked):focus-within {
+    .camwrap:not(.picked):has(.camsel:focus-visible) {
       outline: 2px solid var(--primary-color);
       outline-offset: 2px;
     }

@@ -24,6 +24,12 @@ describe("scrollEdges", () => {
     expect(scrollEdges(0.4, 300, 500)).toEqual({ left: false, right: true });
   });
 
+  it("treats a bounce past either end as that end", () => {
+    // Safari's rubber-band scrolling reports -30 before the start and 230 past the end.
+    expect(scrollEdges(-30, 300, 500)).toEqual({ left: false, right: true });
+    expect(scrollEdges(230, 300, 500)).toEqual({ left: true, right: false });
+  });
+
   describe("right to left", () => {
     // The scroller starts at its right edge; scrolling toward the end makes scrollLeft negative.
     it("has more on the left before scrolling", () => {
@@ -36,6 +42,11 @@ describe("scrollEdges", () => {
 
     it("has more only on the right when scrolled to the end", () => {
       expect(scrollEdges(-200, 300, 500, true)).toEqual({ left: false, right: true });
+    });
+
+    it("treats a bounce past either end as that end", () => {
+      expect(scrollEdges(30, 300, 500, true)).toEqual({ left: true, right: false });
+      expect(scrollEdges(-230, 300, 500, true)).toEqual({ left: false, right: true });
     });
   });
 });
