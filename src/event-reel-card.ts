@@ -7,7 +7,7 @@ import { detectCapabilities, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
 import { findEvent, parseReelParam } from "./core/deeplink";
 import { scrollEdges } from "./core/overflow";
-import { allOf, isUnreviewed, itemEvents, visibleRows } from "./core/filters";
+import { allItemEvents, allOf, attachedEvents, isUnreviewed, visibleRows } from "./core/filters";
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
 import type { TimelineItem } from "./core/grouping";
@@ -874,7 +874,7 @@ export class EventReelCard extends LitElement {
   private _resolveDeepLink(final = false) {
     const id = this._pendingLink;
     if (!id || !this._loaded) return;
-    const target = findEvent(this._items.flatMap(itemEvents), id);
+    const target = findEvent(this._items.flatMap(allItemEvents), id);
     if (!target) {
       if (final) {
         this._pendingLink = undefined;
@@ -888,6 +888,15 @@ export class EventReelCard extends LitElement {
     this._clearLinkFromUrl();
     this._filter = { categories: new Set() };
     this._reach = target.id;
+    // A change attached to a camera row: open that row (a group expands) and point at the step.
+    const host = this._items.find((i) => attachedEvents(i).includes(target));
+    if (host) {
+      this._linkedEvent = target.id;
+      if (host.kind === "event") this._openId = host.event.id;
+      else this._openGroups = new Set([...this._openGroups, host.id]);
+      void this._scrollTo(host.id, "smooth");
+      return;
+    }
     const container = this._items.find((i) => i.kind !== "event" && i.events.includes(target));
     if (container?.kind === "burst") {
       // Bursts have no detail; expand the burst and point at the step.
@@ -1217,7 +1226,7 @@ export class EventReelCard extends LitElement {
       this._items,
       filter,
       this._config!.maxEvents,
-      (item) => itemEvents(item).some((e) => this._isReached(e)),
+      (item) => allItemEvents(item).some((e) => this._isReached(e)),
       hit,
     );
   }

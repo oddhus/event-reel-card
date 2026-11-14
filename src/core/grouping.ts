@@ -17,12 +17,21 @@ export type BurstSegment = {
   steps: BurstStep[];
 };
 
+/** Door, lock or other changes shown on a camera's row (entities with `camera:`, §5.3). */
+export type Attachment = {
+  /** Oldest first. */
+  events: ReelEvent[];
+  segments: BurstSegment[];
+};
+
 type ItemBase = {
   id: string;
   /** Latest start among the item's events; the list is sorted by this, newest first. */
   sortTime: number;
   start: number;
   end: number;
+  /** On a camera row (an event with media or a camera group): the changes attached to it. */
+  attached?: Attachment;
 };
 
 export type TimelineItem =
@@ -198,5 +207,68 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
     if (!mediaKey(e) && !isBurstable(e) && e.category !== "presence") items.push(eventItem(e));
   }
 
-  return items.sort((a, b) => b.sortTime - a.sortTime);
+  return attachNear(items, opts.window, bounceWindow).sort((a, b) => b.sortTime - a.sortTime);
+}
+
+/** Seconds between two spans; 0 when they overlap. */
+const gapBetween = (a: { start: number; end: number }, b: { start: number; end: number }) =>
+  Math.max(0, a.start - b.end, b.start - a.end);
+
+/** The camera key of a row with media; undefined for plain rows. */
+function cameraOf(item: TimelineItem): string | undefined {
+  if (item.kind === "camera") return item.camera;
+  if (item.kind === "event") return mediaKey(item.event);
+  return undefined;
+}
+
+/**
+ * Moves bursts and single state changes onto the camera row they belong to: every event of
+ * the burst names the same `nearCamera`, and a row of that camera lies within `window`
+ * seconds of it (the nearest wins). A mixed burst, of two cameras or with an entity that has
+ * no `camera:`, keeps a row of its own.
+ */
+function attachNear(items: TimelineItem[], window: number, bounceWindow: number): TimelineItem[] {
+  const hosts = new Map<string, TimelineItem[]>();
+  for (const item of items) {
+    const key = cameraOf(item);
+    if (!key) continue;
+    const list = hosts.get(key) ?? [];
+    list.push(item);
+    hosts.set(key, list);
+  }
+  if (!hosts.size) return items;
+
+  const joined = new Map<TimelineItem, ReelEvent[]>();
+  const moved = new Set<TimelineItem>();
+  for (const item of items) {
+    if (cameraOf(item)) continue;
+    const events = item.kind === "event" ? [item.event] : item.events;
+    const near = events[0].nearCamera;
+    if (!near || events.some((e) => e.nearCamera !== near)) continue;
+    let best: TimelineItem | undefined;
+    let bestGap = Infinity;
+    for (const host of hosts.get(near) ?? []) {
+      const gap = gapBetween(item, host);
+      if (gap <= window && gap < bestGap) {
+        best = host;
+        bestGap = gap;
+      }
+    }
+    if (!best) continue;
+    joined.set(best, [...(joined.get(best) ?? []), ...events]);
+    moved.add(item);
+  }
+  if (!moved.size) return items;
+
+  return items
+    .filter((item) => !moved.has(item))
+    .map((item) => {
+      const events = joined.get(item);
+      if (!events) return item;
+      const sorted = [...events].sort((a, b) => a.start - b.start);
+      return {
+        ...item,
+        attached: { events: sorted, segments: buildSegments(sorted, bounceWindow) },
+      };
+    });
 }

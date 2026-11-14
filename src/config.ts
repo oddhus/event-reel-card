@@ -10,6 +10,8 @@ export type EntityConfig = {
   states?: Record<string, string>;
   only_states?: string[];
   actor_attribute?: string;
+  /** The camera that watches this door or lock: its changes join that camera's rows (§5.3). */
+  camera?: string;
 };
 
 /** A provider is "explicit" when the user configured it; only explicit providers warn when missing. */
