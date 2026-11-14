@@ -49,6 +49,8 @@ export type CardView = {
   toggleGroup(id: string): void;
   toggleCategory(c: Category): void;
   toggleBand(key: string): void;
+  toggleUnreviewed(): void;
+  toggleNobodyHome(): void;
   setCamera(key: string): void;
   markReviewed(events: ReelEvent[]): void;
   moreInfo(entityId: string): void;

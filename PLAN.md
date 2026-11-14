@@ -660,6 +660,13 @@ Later:
   up to 600 px wide (the narrow row layout, §5.2) the camera menu is an icon (the native
   select lies over it, invisible) until a camera is picked, which gives the chips about
   75 px more (in English).
+  Two chips test each event, like the band chips (§5.6): **Nobody home** (after the band
+  chips, warning color, `mdi:home-off-outline`; shown with `presence` on when a row is
+  flagged, §5.10) and **Unreviewed** (after the categories; shown when there are unreviewed
+  Frigate reviews). They narrow a camera group to the events that pass, keep a burst whole,
+  and must hold for the same event as a picked band and a category chip
+  (`core/filters.ts` `allOf`). Counts cover the whole view, and a picked chip stays at 0
+  so it can be switched off. A change to `presence` clears the "nobody home" pick.
   The band chips still lead (§5.6).
 - **Day strip (P1):** a 24 h bar about 28 px high, with one tick per event colored by
   category, faint hourly activity in the background, context bands and a "now" line.
@@ -930,9 +937,9 @@ can already shade "away mode", but not say who, and a template can't read past s
   color, labelled "Nobody home". Initials go from short to long per name (first letter;
   first and last word's first letters, or a one-word name's first two; then one letter
   more) until no two clash. A badge in the title was tried and dropped: it read like the
-  threat badge and took title space on narrow rows. Not done: a "nobody home" filter chip
-  or strip band (a context band on `zone.home` with state `0` covers that, without the
-  grace).
+  threat badge and took title space on narrow rows. The "Nobody home" filter chip (§5.1)
+  shows only the flagged rows. Not done: a strip band for it (a context band on
+  `zone.home` with state `0` covers that, without the grace).
 
 ---
 

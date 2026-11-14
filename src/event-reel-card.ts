@@ -7,7 +7,7 @@ import { detectCapabilities, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
 import { findEvent, parseReelParam } from "./core/deeplink";
 import { scrollEdges } from "./core/overflow";
-import { itemEvents, visibleRows } from "./core/filters";
+import { allOf, isUnreviewed, itemEvents, visibleRows } from "./core/filters";
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
 import type { TimelineItem } from "./core/grouping";
@@ -23,6 +23,7 @@ import {
   pastDayTakesLive,
   presenceEntities,
   presenceFetchStart,
+  whileNobodyHome,
 } from "./core/presence";
 import type { Presence } from "./core/presence";
 import { browserTimeZone, computeRange, dayKey, dayRange, shiftDay } from "./core/time";
@@ -225,6 +226,10 @@ export class EventReelCard extends LitElement {
     // Band keys are positions in `context`; picked ones mean something else after a change.
     else if (prev && JSON.stringify(prev.context) !== JSON.stringify(next.context)) {
       this._filter = { ...this._filter, bands: undefined };
+    }
+    // A change to `presence` changes who counts as home, so the "nobody home" pick goes too.
+    if (prev && JSON.stringify(prev.presence) !== JSON.stringify(next.presence)) {
+      this._filter = { ...this._filter, nobodyHome: undefined };
     }
     const leaveDay = !next.dayNavigation && this._day !== undefined;
     if (leaveDay) this._setDay(undefined);
@@ -1100,6 +1105,8 @@ export class EventReelCard extends LitElement {
       toggleGroup: (id) => this._toggleGroup(id),
       toggleCategory: (c) => this._toggleCategory(c),
       toggleBand: (key) => this._toggleBand(key),
+      toggleUnreviewed: () => this._toggleUnreviewed(),
+      toggleNobodyHome: () => this._toggleNobodyHome(),
       setCamera: (key) => this._setCamera(key),
       markReviewed: (events) => void this._markReviewed(events),
       moreInfo: (entityId) => this._moreInfo(entityId),
@@ -1158,6 +1165,14 @@ export class EventReelCard extends LitElement {
     return computePresence(people, this._context, this._viewRange()!, clock.now());
   }
 
+  private _toggleUnreviewed() {
+    this._filter = { ...this._filter, unreviewed: !this._filter.unreviewed || undefined };
+  }
+
+  private _toggleNobodyHome() {
+    this._filter = { ...this._filter, nobodyHome: !this._filter.nobodyHome || undefined };
+  }
+
   private _toggleBand(key: string) {
     const bands = new Set(this._filter.bands);
     if (bands.has(key)) bands.delete(key);
@@ -1173,13 +1188,20 @@ export class EventReelCard extends LitElement {
     const view = this._view();
     // A picked band the config no longer has is ignored, so it can't hide every row.
     const picked = this._bands.filter((b) => this._filter.bands?.has(b.key));
-    const inBand = picked.length ? inAnyBand(picked) : undefined;
+    const presence = this._presence;
+    // The per-event chips, all of which a row's event must pass (§5.1). "Nobody home" is
+    // ignored while presence is off, like a band the config no longer has.
+    const hit = allOf(
+      picked.length ? inAnyBand(picked) : undefined,
+      this._filter.unreviewed ? isUnreviewed : undefined,
+      this._filter.nobodyHome && presence ? (e) => whileNobodyHome(presence, e) : undefined,
+    );
     const shown = visibleRows(
       this._items,
       this._filter,
       this._config.maxEvents,
       (item) => itemEvents(item).some((e) => this._isReached(e)),
-      inBand,
+      hit,
     );
     const filtered = shown.list;
     // A quiet day still shows its bands: the strip, their chips (at 0) and the legend.

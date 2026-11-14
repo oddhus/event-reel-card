@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The project uses
 
 ## Unreleased
 
+### Added
+
+- Two filter chips: "Unreviewed" shows only Frigate reviews not yet marked reviewed, and
+  "Nobody home" (with `presence` on) only the events while nobody was home. Like the band
+  chips, they narrow a camera group to the matching events, and combine with the other
+  chips.
+
 ### Changed
 
 - The filter chips fade at the edge where more of them are out of view, so it shows that

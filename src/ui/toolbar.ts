@@ -6,8 +6,9 @@ import { html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { CATEGORY_COLORS, iconFor } from "../core/categories";
 import { bandCounts } from "../core/context";
-import { cameraOptions, itemEvents, summarize } from "../core/filters";
+import { cameraOptions, countRows, isUnreviewed, itemEvents, summarize } from "../core/filters";
 import type { TimelineItem } from "../core/grouping";
+import { whileNobodyHome } from "../core/presence";
 import { stripModel } from "../core/strip";
 import { dayKey, dayRange, formatDay, formatTime, shiftDay } from "../core/time";
 import { time } from "./view";
@@ -75,9 +76,7 @@ export function renderWarnings(view: CardView) {
 export function renderToolbar(view: CardView, items: TimelineItem[], filtered: TimelineItem[]) {
   const t = view.t;
   const cfg = view.config;
-  const unreviewed = filtered
-    .flatMap(itemEvents)
-    .filter((e) => e.frigate?.reviewId && e.reviewed === false);
+  const unreviewed = filtered.flatMap(itemEvents).filter(isUnreviewed);
   const active = view.filter.categories;
   const counts = cfg.filters ? summarize(items) : [];
   // An active chip stays visible (at 0) so it can be switched off.
@@ -98,7 +97,24 @@ export function renderToolbar(view: CardView, items: TimelineItem[], filtered: T
   const bandChips = cfg.filters
     ? view.bands.filter((b) => b.intervals.length || picked.has(b.key))
     : [];
-  if (!counts.length && !showCams && !unreviewed.length && !bandChips.length) return nothing;
+  // The per-event chips count rows over the whole view, like the others, and stay while
+  // picked (at 0) so they can be switched off.
+  const presence = view.presence;
+  const nobodyCount =
+    cfg.filters && presence ? countRows(items, (e) => whileNobodyHome(presence, e)) : 0;
+  const showNobody = !!presence && cfg.filters && (nobodyCount > 0 || !!view.filter.nobodyHome);
+  const unreviewedCount = cfg.filters ? countRows(items, isUnreviewed) : 0;
+  const showUnreviewed = cfg.filters && (unreviewedCount > 0 || !!view.filter.unreviewed);
+  if (
+    !counts.length &&
+    !showCams &&
+    !unreviewed.length &&
+    !bandChips.length &&
+    !showNobody &&
+    !showUnreviewed
+  ) {
+    return nothing;
+  }
   const markLabel = t("action.mark_all_reviewed_n", { count: unreviewed.length });
   return html`<div class="toolbar">
     <div class="chipbar" role="group" aria-label=${t("filter.label")}>
@@ -116,6 +132,21 @@ export function renderToolbar(view: CardView, items: TimelineItem[], filtered: T
             <span class="n">${bandCount.get(b.key) ?? 0}</span>
           </button>`,
       )}
+      ${
+        showNobody
+          ? html`<button
+              class="fchip nobodychip"
+              aria-pressed=${view.filter.nobodyHome ? "true" : "false"}
+              title=${t("filter.nobody_home_title")}
+              style="--c:var(--warning-color)"
+              @click=${() => view.toggleNobodyHome()}
+            >
+              <ha-icon icon="mdi:home-off-outline"></ha-icon>
+              <span>${t("filter.nobody_home")}</span>
+              <span class="n">${nobodyCount}</span>
+            </button>`
+          : nothing
+      }
       ${counts.map(
         (c) =>
           html`<button
@@ -129,6 +160,21 @@ export function renderToolbar(view: CardView, items: TimelineItem[], filtered: T
             <span class="n">${c.count}</span>
           </button>`,
       )}
+      ${
+        showUnreviewed
+          ? html`<button
+              class="fchip unreviewedchip"
+              aria-pressed=${view.filter.unreviewed ? "true" : "false"}
+              title=${t("filter.unreviewed_title")}
+              style="--c:var(--primary-color)"
+              @click=${() => view.toggleUnreviewed()}
+            >
+              <ha-icon icon="mdi:circle-medium"></ha-icon>
+              <span>${t("filter.unreviewed")}</span>
+              <span class="n">${unreviewedCount}</span>
+            </button>`
+          : nothing
+      }
     </div>
     ${
       showCams
