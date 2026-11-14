@@ -33,7 +33,10 @@ export type FrigateConfig = {
   clip_padding: [number, number];
 } & ProviderToggle;
 
-export type NestConfig = ProviderToggle;
+export type NestConfig = {
+  /** Nest camera events as rows of their own (§3.2), not only clips for AI events. */
+  events: boolean;
+} & ProviderToggle;
 
 export type EventReelConfig = ProviderToggle;
 
@@ -85,7 +88,7 @@ export type CardConfig = {
   entities?: (string | EntityConfig)[];
   llmvision?: boolean | Partial<Omit<LlmVisionConfig, "explicit">>;
   frigate?: boolean | Partial<Omit<FrigateConfig, "explicit">>;
-  nest?: boolean | { enabled?: boolean };
+  nest?: boolean | { enabled?: boolean; events?: boolean };
   /** The Event Reel integration (AI descriptions). */
   event_reel?: boolean | { enabled?: boolean };
   camera_aliases?: Record<string, string>;
@@ -197,7 +200,7 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
       hide_unconfirmed: frig.hide_unconfirmed ?? false,
       clip_padding: [num(padding[0], 10), num(padding[1], 20)],
     },
-    nest: toggle(config.nest),
+    nest: { ...toggle(config.nest), events: obj<NestConfig>(config.nest).events === true },
     event_reel: toggle(config.event_reel),
     cameraAliases: obj<Record<string, string>>(config.camera_aliases) as Record<string, string>,
     cameras: obj<Record<string, CameraOverride>>(config.cameras) as Record<string, CameraOverride>,

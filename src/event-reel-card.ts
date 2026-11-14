@@ -32,6 +32,7 @@ import type { Category } from "./types";
 import type { HomeAssistant } from "./ha-types";
 import { getLocalize, resolveLanguage } from "./i18n";
 import { createEntityProvider, latestEntityChangeBefore } from "./providers/entity";
+import { createNestEventProvider, nestEventsChanged } from "./providers/nest";
 import { createEventReelProvider, latestEventReelBefore } from "./providers/eventreel";
 import { frigateProvider, latestReviewBefore, markReviewed } from "./providers/frigate";
 import {
@@ -57,7 +58,7 @@ import "./ui/strip";
 
 export type { CardConfig as EventReelCardConfig };
 
-type ProviderType = "entity" | "llmvision" | "event_reel" | "frigate";
+type ProviderType = "entity" | "llmvision" | "event_reel" | "frigate" | "nest";
 
 /** Overridable clock (epoch seconds), for the dev harness. */
 export const clock = { now: () => Date.now() / 1000 };
@@ -143,6 +144,7 @@ export class EventReelCard extends LitElement {
     createLlmVisionProvider(),
     createEventReelProvider(),
     frigateProvider,
+    createNestEventProvider(),
   ];
   private _localize: Localize = getLocalize("en");
   private _language = "en";
@@ -297,6 +299,9 @@ export class EventReelCard extends LitElement {
     if (this._status("llmvision") === "active" && timelineChanged(prev, hass)) {
       this._debouncedRefresh("llmvision", 2000);
     }
+    if (this._status("nest") === "active" && nestEventsChanged(prev, hass)) {
+      this._debouncedRefresh("nest", 1000);
+    }
   }
 
   get hass(): HomeAssistant | undefined {
@@ -327,7 +332,14 @@ export class EventReelCard extends LitElement {
       ...pick((id) => id.startsWith("binary_sensor.") && doorClass(id)),
       ...pick((id) => id.startsWith("person.")),
     ];
-    return entities.length ? { entities } : {};
+    const components = hass.config.components;
+    // A Nest home without Frigate gets its camera events as rows; with Frigate, Nest only
+    // adds doorbell clips to AI text, as before.
+    const nestRows = components.includes("nest") && !components.includes("frigate");
+    return {
+      ...(entities.length ? { entities } : {}),
+      ...(nestRows ? { nest: { events: true } } : {}),
+    };
   }
 
   // ----- lifecycle -----

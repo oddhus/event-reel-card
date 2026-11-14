@@ -93,7 +93,42 @@ function collapseSameClip(texts: ReelEvent[]): ReelEvent[] {
   });
 }
 
+const NEST_CLIP = "media-source://nest/";
+
+/** The Nest event token of an AI event's clip, if it has one. */
+const nestToken = (e: ReelEvent) =>
+  e.clip?.path.startsWith(NEST_CLIP) ? e.clip.path.slice(e.clip.path.lastIndexOf("/") + 1) : "";
+
+/**
+ * Nest event rows (§3.2) take the AI text about their own clip, by event token: exact, never
+ * by time, since a ring and the person seen before it are separate Nest events.
+ */
+function joinNest(events: ReelEvent[]): { nest: ReelEvent[]; others: ReelEvent[] } {
+  const rows = events.filter((e) => e.provider === "nest");
+  if (!rows.length) return { nest: [], others: events };
+  const byToken = new Map<string, ReelEvent>();
+  for (const row of rows) for (const token of row.aliases ?? []) byToken.set(token, row);
+  const joined = new Map<ReelEvent, ReelEvent[]>();
+  const others: ReelEvent[] = [];
+  for (const e of events) {
+    if (e.provider === "nest") continue;
+    const row = AI_PROVIDERS.includes(e.provider) ? byToken.get(nestToken(e)) : undefined;
+    if (row) joined.set(row, [...(joined.get(row) ?? []), e]);
+    else others.push(e);
+  }
+  const nest = rows.map((row) => {
+    const texts = joined.get(row)?.sort((a, b) => a.start - b.start);
+    return texts ? mergeGroup(row, texts) : row;
+  });
+  return { nest, others };
+}
+
 export function mergeEvents(events: ReelEvent[], opts: MergeOptions): ReelEvent[] {
+  const { nest, others } = joinNest(events);
+  return [...nest, ...mergeTimed(others, opts)];
+}
+
+function mergeTimed(events: ReelEvent[], opts: MergeOptions): ReelEvent[] {
   const texts = collapseSameClip(events.filter(isText).sort((a, b) => a.start - b.start));
   const media = events.filter(isMedia);
   const rest = events.filter((e) => !isText(e) && !isMedia(e));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasSource } from "../src/core/capabilities";
+import { hasSource, providerStatus } from "../src/core/capabilities";
 import { normalizeConfig } from "../src/config";
 
 const none = { llmvision: false, event_reel: false, frigate: false, nest: false };
@@ -33,5 +33,21 @@ describe("hasSource", () => {
 
   it("is false when a configured integration isn't installed", () => {
     expect(hasSource(card({ llmvision: true }), none)).toBe(false);
+  });
+});
+
+describe("Nest events as a source", () => {
+  it("count only when switched on and Nest is installed", () => {
+    const on = card({ nest: { events: true } });
+    expect(hasSource(on, { ...none, nest: true })).toBe(true);
+    expect(hasSource(on, none)).toBe(false);
+    expect(providerStatus("nest", on, none)).toBe("missing");
+    expect(providerStatus("nest", card({ nest: true }), { ...none, nest: true })).toBe("off");
+    expect(
+      providerStatus("nest", card({ nest: { enabled: false, events: true } }), {
+        ...none,
+        nest: true,
+      }),
+    ).toBe("off");
   });
 });

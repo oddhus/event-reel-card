@@ -252,6 +252,15 @@ describe("editor model", () => {
     ]);
   });
 
+  it("switches Nest events on and off, back to the plain auto setting", () => {
+    const on = formToConfig({ ...configToForm(base), nest_events: true }, base);
+    expect(on.nest).toEqual({ events: true });
+    expect(configToForm(on).nest_events).toBe(true);
+    // In the same editor session, so the config it opened with had no `nest`.
+    const off = formToConfig({ ...configToForm(on), nest_events: false }, on, base);
+    expect(off).not.toHaveProperty("nest");
+  });
+
   it("disables a provider without losing its options and re-enables it", () => {
     const off = formToConfig({ ...configToForm(base), llmvision_enabled: false }, base);
     expect(off.llmvision).toEqual({ non_camera: false, enabled: false });

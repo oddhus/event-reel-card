@@ -27,6 +27,7 @@ export const nb: Strings = {
   "title.object_at_camera": "{object} ved {camera}",
   "title.activity_at_camera": "Aktivitet ved {camera}",
   "title.rang_at_camera": "Det ringte på ved {camera}",
+  "title.sound_at_camera": "Lyd ved {camera}",
   "object.person": "Person",
   "object.car": "Bil",
   "object.truck": "Lastebil",
@@ -134,6 +135,9 @@ export const nb: Strings = {
   "editor.frigate_show_unmatched": "Frigate-hendelser uten KI-beskrivelse",
   "editor.frigate_alerts_only": "Bare Frigate-varsler",
   "editor.nest_enabled": "Klipp fra Nest-ringeklokke",
+  "editor.nest_events": "Nest-hendelser som rader",
+  "editor.nest_events_help":
+    "Ringing, personer og bevegelse fra Nest-kameraer, så lenge opptakeren tar vare på historikken (10 dager som standard)",
   "editor.yaml_hint":
     "Flere valg (kameraaliaser, innstillinger per kamera, koblingsvinduer) finnes i YAML.",
 };

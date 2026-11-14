@@ -238,3 +238,70 @@ describe("mergeEvents review fixes", () => {
     expect(mergeEvents([r], opts(5000, { showUnmatched: false }))).toHaveLength(0);
   });
 });
+
+describe("mergeEvents with Nest event rows", () => {
+  const clip = (tok: string) => ({
+    kind: "mp4" as const,
+    path: `media-source://nest/dev1/${tok}`,
+    resolve: true,
+  });
+  const nestRow = (start: number, tokens: string[]) =>
+    ev({
+      id: `nest:${tokens[0]}`,
+      provider: "nest",
+      camera: "camera.doorbell",
+      start,
+      title: "The doorbell rang at Doorbell",
+      category: "doorbell",
+      aliases: tokens,
+      clip: clip(tokens[0]),
+    });
+  const text = (start: number, tok: string, title: string) =>
+    ev({
+      id: `event_reel:${title}`,
+      provider: "event_reel",
+      camera: "camera.doorbell",
+      start,
+      title,
+      description: `${title}, described`,
+      category: "person",
+      clip: clip(tok),
+    });
+  const t0 = iso("2026-01-15T10:20:00Z");
+
+  it("joins AI text about a Nest event to that event's row, by token", () => {
+    const out = mergeEvents(
+      [nestRow(t0, ["tokA"]), text(t0 + 12, "tokA", "A courier holds a parcel")],
+      opts(t0 + 600),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: "nest:tokA",
+      title: "A courier holds a parcel",
+      description: "A courier holds a parcel, described",
+      category: "person",
+      clip: clip("tokA"),
+    });
+    expect(out[0].sources.sort()).toEqual(["event_reel", "nest"]);
+    expect(out[0].aliases).toContain("event_reel:A courier holds a parcel");
+  });
+
+  it("joins text about a later trigger of the same visit", () => {
+    const out = mergeEvents(
+      [nestRow(t0, ["tokA", "tokB"]), text(t0 + 40, "tokB", "Second ring")],
+      opts(t0 + 600),
+    );
+    expect(out.map((e) => e.title)).toEqual(["Second ring"]);
+  });
+
+  it("never joins by time: text about another Nest event a few seconds apart stays a row", () => {
+    const out = mergeEvents(
+      [nestRow(t0, ["tokA"]), text(t0 + 3, "tokOther", "Person at the door")],
+      opts(t0 + 600),
+    );
+    expect(out.map((e) => e.title).sort()).toEqual([
+      "Person at the door",
+      "The doorbell rang at Doorbell",
+    ]);
+  });
+});

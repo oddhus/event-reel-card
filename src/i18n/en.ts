@@ -25,6 +25,7 @@ export const en = {
   "title.object_at_camera": "{object} at {camera}",
   "title.activity_at_camera": "Activity at {camera}",
   "title.rang_at_camera": "The doorbell rang at {camera}",
+  "title.sound_at_camera": "Sound at {camera}",
   "object.person": "Person",
   "object.car": "Car",
   "object.truck": "Truck",
@@ -131,6 +132,9 @@ export const en = {
   "editor.frigate_show_unmatched": "Frigate events without an AI description",
   "editor.frigate_alerts_only": "Frigate alerts only",
   "editor.nest_enabled": "Nest doorbell clips",
+  "editor.nest_events": "Nest events as rows",
+  "editor.nest_events_help":
+    "Rings, people and motion from Nest cameras, for as long as the recorder keeps history (10 days by default)",
   "editor.yaml_hint":
     "More options (camera aliases, per-camera settings, merge windows) are available in YAML.",
 };

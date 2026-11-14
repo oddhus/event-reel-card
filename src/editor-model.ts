@@ -23,6 +23,7 @@ export type EditorForm = {
   frigate_show_unmatched: boolean;
   frigate_alerts_only: boolean;
   nest_enabled: boolean;
+  nest_events: boolean;
 };
 
 const rangeText = (r: CardConfig["range"]) =>
@@ -48,6 +49,7 @@ export function configToForm(config: CardConfig): EditorForm {
     frigate_show_unmatched: n.frigate.show_unmatched,
     frigate_alerts_only: n.frigate.severity.length === 1 && n.frigate.severity[0] === "alert",
     nest_enabled: n.nest.enabled,
+    nest_events: n.nest.events,
   };
 }
 
@@ -177,7 +179,16 @@ export function formToConfig(
     ),
   );
 
-  putProvider(out, "nest", provider(original.nest, form.nest_enabled, {}, initial.nest));
+  putProvider(
+    out,
+    "nest",
+    provider(
+      original.nest,
+      form.nest_enabled,
+      { events: form.nest_events ? true : undefined },
+      initial.nest,
+    ),
+  );
 
   return out as unknown as CardConfig;
 }

@@ -39,7 +39,7 @@ describe("normalizeConfig", () => {
     });
     expect(c.llmvision).toMatchObject({ enabled: true, explicit: true, non_camera: false });
     expect(c.frigate).toMatchObject({ enabled: false, explicit: true });
-    expect(c.nest).toEqual({ enabled: true, explicit: true });
+    expect(c.nest).toEqual({ enabled: true, explicit: true, events: false });
   });
 
   it("normalizes entity shorthands", () => {
