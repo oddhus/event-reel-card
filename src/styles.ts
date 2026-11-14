@@ -336,6 +336,7 @@ export const styles = css`
     .list.comfortable {
       --reel-slot-width: 64px;
       --reel-thumb-height: 36px;
+      --reel-row-camera: 44px;
     }
     .row {
       gap: 8px;

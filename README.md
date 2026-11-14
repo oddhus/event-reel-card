@@ -159,7 +159,7 @@ cameras:
 |---|---|---|
 | `title` | none | Card title. |
 | `range` | `24h` | `24h` (rolling), `today`, or a number of hours such as `12h`. |
-| `density` | `compact` | `compact` or `comfortable` (bigger previews, two-line descriptions). |
+| `density` | `compact` | `compact` or `comfortable` (bigger previews (compact-size on a phone), two-line descriptions). |
 | `preview` | `visible` | Animated previews: `visible`, `hover`, `still` or `off`. |
 | `language` | `auto` | `auto` (your HA language), `en` or `nb`. |
 | `max_events` | `200` | Most events to show, counted after the filters. A note under the list says how many older ones are hidden. |
