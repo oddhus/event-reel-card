@@ -980,6 +980,14 @@ export class EventReelCard extends LitElement {
     const targets = events.filter((e) => e.frigate?.reviewId && e.reviewed === false);
     if (!hass || !targets.length) return;
     for (const e of targets) this._reviewed.add(e.id);
+    // With "Unreviewed" picked the marked row leaves the list; close it, so it doesn't open
+    // again (with its media) when the chip is switched off.
+    const open = this._openId;
+    if (this._filter.unreviewed && open) {
+      if (targets.some((e) => e.id === open || !!e.aliases?.includes(open))) {
+        this._openId = undefined;
+      }
+    }
     this._recompute();
     void this._keepFocusAfterMarking(targets.length === 1 ? targets[0].id : undefined);
     try {
@@ -1007,11 +1015,14 @@ export class EventReelCard extends LitElement {
     if (!active) return;
     await this.updateComplete;
     const target =
-      (eventId &&
+      ((eventId &&
         this.renderRoot.querySelector<HTMLElement>(
           `button.row[data-id="${CSS.escape(eventId)}"]`,
         )) ||
-      this.renderRoot.querySelector<HTMLElement>("button.row");
+        this.renderRoot.querySelector<HTMLElement>("button.row")) ??
+      // No row left ("Unreviewed" picked): the picked chip, or "Show all".
+      this.renderRoot.querySelector<HTMLElement>('.fchip[aria-pressed="true"]') ??
+      this.renderRoot.querySelector<HTMLElement>(".empty .linkish");
     target?.focus();
   }
 
