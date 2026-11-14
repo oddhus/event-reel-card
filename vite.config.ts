@@ -32,6 +32,7 @@ export default defineConfig({
   },
   test: {
     include: ["test/**/*.test.ts"],
+    exclude: ["test/ui/**", "node_modules/**"],
     environment: "node",
   },
 });

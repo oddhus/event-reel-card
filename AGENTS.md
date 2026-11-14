@@ -90,7 +90,12 @@ the clock, and `?live=1` with `FRIGATE_URL` for real Frigate media through the d
 The harness doesn't exercise HA auth, URL signing, the integration proxies or HA's card
 editor (its entity pickers only work inside HA), so check changes there in a real Home
 Assistant.
-Before review, run `npm run lint`, `npm test` and `npm run build`. CI runs the same.
+Smoke-test the card's behavior in a real browser in `test/ui/` (`npm run test:ui`, Vitest
+browser mode in Chromium). They mount the card through `dev/mount.ts`, the same setup as
+the harness, and assert what PLAN.md specifies (first paint, keyboard, filters, layout).
+The first run needs `npx playwright install chromium`.
+Before review, run `npm run lint`, `npm test`, `npm run test:ui` and `npm run build`. CI
+runs the same.
 
 ## Privacy
 

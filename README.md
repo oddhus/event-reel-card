@@ -320,6 +320,7 @@ the preview until the clip plays.
 npm install
 npm run dev     # dev harness with a mock hass at http://localhost:5173
 npm test
+npm run test:ui # browser smoke tests (once: npx playwright install chromium)
 npm run lint
 npm run build   # dist/event-reel-card.js
 ```

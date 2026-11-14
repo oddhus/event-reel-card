@@ -939,7 +939,8 @@ can already shade "away mode", but not say who, and a template can't read past s
    can only be verified against real HA. The install-specific steps are in
    `CLAUDE.local.md`.
 2. `npm run dev`: Vite dev server serving `dev/index.html`, for fast UI work. It mounts
-   the card with a **mock `hass`** (`dev/mock-hass.ts`):
+   the card with a **mock `hass`** (`dev/mock-hass.ts`) through `dev/mount.ts`, which the
+   browser tests share:
    - `callWS` answers `call_service llmvision.get_events`, `frigate/reviews/get` (as a
      JSON string), `logbook/get_events`, `history/history_during_period`,
      `media_source/*` and `auth/sign_path` from fixtures.
@@ -954,6 +955,9 @@ can already shade "away mode", but not say who, and a template can't read past s
    - Fixtures: commit only anonymized `*.example.json`. Real snapshots go in
      `*.local.json` (gitignored).
 3. `npm test`: Vitest unit tests (merge, grouping, cameras, provider parsers, time).
+   `npm run test:ui`: browser smoke tests in Chromium (`test/ui/`, Vitest browser mode with
+   Playwright): first paint, one open detail and Esc, ↑/↓, a category chip, the day back
+   button, and no overflow at 375 px.
 4. `npm run build` → `dist/event-reel-card.js`. `npm run lint` (oxlint + tsc
    `--noEmit`).
 5. Check: desktop Chrome, Firefox (no HEVC), mobile width 375 px, the HA Companion app
@@ -967,7 +971,8 @@ can already shade "away mode", but not say who, and a template can't read past s
   "render_readme": true, "homeassistant": "<min>" }`. Set the minimum HA version from
   the APIs actually used (`getConfigForm`, `formatEntityState`, `getGridOptions`).
 - GitHub Actions:
-  - `ci.yml`: on push/PR, run `npm ci && npm run lint && npm test && npm run build`, and
+  - `ci.yml`: on push/PR, run `npm ci && npm run lint && npm test && npm run build`, the
+    browser smoke tests (`npm run test:ui`) in a job of their own, and
     the HACS Action (`hacs/action@main`, category `plugin`, as HACS documents it).
   - `release.yml`: on tag `v*`, build and attach `dist/event-reel-card.js` to the GitHub
     release.

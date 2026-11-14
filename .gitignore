@@ -16,3 +16,6 @@ dev/fixtures/*.local.json
 # Local deploy helpers with private hosts
 *.local.sh
 .claude/launch.json
+
+# Browser test failure screenshots
+.vitest/
