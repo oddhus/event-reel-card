@@ -5,7 +5,7 @@ import { nb } from "./nb";
 
 const languages: Record<string, Strings> = { en, nb };
 
-/** Maps a configured or HA language to a supported one (`nb`, `nn`, `no` → `nb`; else `en`). */
+/** Maps a configured or HA language to a registered one by base code (`nn`, `no` → `nb`); else `en`. */
 export function resolveLanguage(configured: string, haLanguage: string | undefined): string {
   const lang = (
     configured && configured !== "auto" ? configured : haLanguage || "en"

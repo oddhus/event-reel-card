@@ -36,6 +36,37 @@ version, the browser or Companion app, the relevant card configuration with your
 replaced, what you expected and what happened, and any errors from the browser console.
 Name the Frigate, Frigate integration or LLM Vision version when the bug involves them.
 
+<a id="add-a-language"></a>
+
+## Adding a language
+
+Translations are welcome. A language is one file in `src/i18n`:
+
+1. Copy `src/i18n/nb.ts` to `src/i18n/<code>.ts`, named by the language's base code, such
+   as `de` or `sv`, and rename its export (`export const de: Strings = { … }`). It stays
+   typed against English (`Strings` from `en.ts`), so lint fails when a key is missing or
+   extra.
+2. Translate the values from `src/i18n/en.ts`. Keep the `{placeholders}` as they are, and keep the keys in the
+   order of `en.ts` so later changes are easy to compare.
+3. Register it in `languages` in `src/i18n/index.ts`. With `language: auto` the card
+   follows the Home Assistant language by its base code (`de-CH` → `de`). When other codes
+   should fall back to yours, as `nn` and `no` do to `nb`, add them to `resolveLanguage`
+   there. Region variants (`pt-BR`) resolve to their base code, so telling two of them apart
+   needs a change to `resolveLanguage` too.
+4. Add it to the language choices of the visual editor (`src/editor.ts`), labelled in its
+   own language; to the `language` row of the README's options table and the language
+   line in its feature list; and to the language lists in PLAN.md (§3 file tree, §4
+   `language`, §5.8).
+5. Add it to the language menu of the dev harness (`dev/index.html`) and its entity state
+   names to `STATE_NAMES` in `dev/mock-hass.ts` (in Home Assistant those come from HA). Run `npm run lint`,
+   `npm test` and `npm run build`, and look at the card in the harness with the language
+   picked, at phone width too: some languages need more room.
+   Add a line under `Unreleased` in [CHANGELOG.md](CHANGELOG.md).
+
+Later changes add each new key to every language file. Contributors who don't write your
+language use the English text there, so a translation can lag behind; a PR that fills in
+those keys is welcome.
+
 ## Setup and workflow
 
 You need Node 24 (the version CI uses).
