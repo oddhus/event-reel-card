@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countsAsStall, stallVerdict } from "../src/core/playback";
+import { countsAsStall, offersDownload, stallVerdict } from "../src/core/playback";
 
 // readyState values from the HTML spec.
 const HAVE_NOTHING = 0;
@@ -74,5 +74,18 @@ describe("countsAsStall", () => {
     expect(countsAsStall(true, HAVE_METADATA)).toBe(true);
     expect(countsAsStall(true, HAVE_NOTHING)).toBe(false);
     expect(countsAsStall(false, HAVE_ENOUGH_DATA)).toBe(false);
+  });
+});
+
+describe("offersDownload", () => {
+  it("hides Download once the recording is known to be deleted", () => {
+    expect(offersDownload("deleted")).toBe(false);
+  });
+
+  it("keeps it while the clip loads or plays, and when it stalled or can't be decoded", () => {
+    // The file may exist: a stall is the network, a codec failure is this browser.
+    for (const status of ["loading", "playing", "unavailable", "codec"] as const) {
+      expect(offersDownload(status)).toBe(true);
+    }
   });
 });
