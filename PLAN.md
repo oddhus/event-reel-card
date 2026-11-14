@@ -579,6 +579,7 @@ language: auto                 # auto (HA user language) | en | nb
 entities:                      # core provider: state changes from the logbook
   - entity: lock.front_door
     actor_attribute: changed_by                 # optional, read from history
+    camera: camera.entrance                     # optional: its changes join that camera's row
   - entity: binary_sensor.front_door
     name: Front door
     icon: mdi:door
@@ -725,8 +726,19 @@ a compact view.
 - **Camera groups:** consecutive events on the same camera within the window collapse
   into "3× Backyard · 14:02–14:09", with a stacked thumbnail.
 - Tap a group to expand it.
-- P2: attach a burst to an overlapping camera event ("Person at the entrance · door
-  unlocked · opened").
+- **Attached to a camera row** (done after 0.6.0): an entity with `camera:` (mapped through
+  `camera_aliases`) gives its events `nearCamera` (not `camera`, which means "has media" and
+  would make the change a camera row). After grouping, a burst or a single change whose
+  events all name the same camera moves onto a row of that camera (an event with media or
+  a camera group) within `grouping.window` of it, the nearest by the gap between their
+  spans (0 when they overlap). The row gets `attached` (events and burst segments): a line
+  with the chain under its title, and the steps with times and actors when opened. A mixed
+  burst, or one with no camera row in reach, keeps its row. Opt-in only: there is no
+  automatic pairing by area, since a wrong pairing hides a door change under another
+  camera. Category chips, `max_events` and deep links count attached changes
+  (`allItemEvents`); band edges, presence marks, the per-event chips and the strip read
+  only the row's own events, which lie within the window of the attached ones. A deep link
+  to an attached change opens its row and highlights the step.
 
 ### 5.4 Expanded detail (inline accordion; one open at a time)
 
@@ -949,7 +961,7 @@ can already shade "away mode", but not say who, and a template can't read past s
 |---|---|
 | P0 (M1) | Entity provider, LLM Vision provider, Frigate reviews provider, many-to-one merge, doorbell clips by Nest token, compact rows, grouping (bursts, bounces, camera groups), animated previews with fallback chain, HLS player with codec fallback, rolling 24 h range, nb/en |
 | P1 | Mark reviewed (+ mark all), download, filter chips and summary, day strip, deep links, GUI editor and stub config, HACS release |
-| P2 | ~~Day navigation~~ (done), ~~context bands~~ (done), calendar provider, full Nest provider, bursts attached to camera events, time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search across days (a one-day version was built and dropped as too little gain over the chips; revisit when AI descriptions are reliable), ~~presence at event time~~ (done), "Summarize the day" (off by default) |
+| P2 | ~~Day navigation~~ (done), ~~context bands~~ (done), calendar provider, full Nest provider, ~~bursts attached to camera events~~ (done), time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search across days (a one-day version was built and dropped as too little gain over the chips; revisit when AI descriptions are reliable), ~~presence at event time~~ (done), "Summarize the day" (off by default) |
 | P3 | Multi-camera sync, public provider API (`window.eventReel.registerProvider`), Reolink media-source provider, weekly heatmap |
 
 ---

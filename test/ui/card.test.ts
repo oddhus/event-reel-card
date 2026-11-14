@@ -559,3 +559,57 @@ describe("Unreviewed and Nobody home chips (PLAN §5.1, §5.10)", () => {
     await until(() => ids(m).length >= all);
   });
 });
+
+describe("changes attached to a camera row (PLAN §5.3)", () => {
+  test("the front door's entry shows on the entrance row, and its steps when opened", async () => {
+    // The harness puts the front door lock and sensor next to camera.entrance; in the example
+    // day someone unlocks, opens, closes and locks it while "Person arrives home" is seen.
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    const host = must(
+      rows(m).find((r) => r.textContent.includes("Person arrives home")),
+      "entrance row",
+    );
+    const chain = must(host.querySelector<HTMLElement>(".chain"), "chain line");
+    expect(chain.textContent.trim()).toBe("Front door: Unlocked · Open · Closed · Locked");
+    // That entry no longer has a row of its own. (Only the bouncing lock at 15:00, with no
+    // entrance review near it, is still a burst.)
+    const bursts = rows(m).filter((r) => (r.dataset.id ?? "").startsWith("burst:"));
+    expect(bursts.map((r) => r.querySelector(".title")?.textContent.trim())).toEqual([
+      "Front door: Unlocked ×5 · Open · Closed · Locked",
+    ]);
+
+    await userEvent.click(host);
+    await m.card.updateComplete;
+    const steps = [...root(m).querySelectorAll<HTMLElement>(".steps .step")];
+    expect(
+      steps.map((s) => s.textContent.replace(/\s+/g, " ").trim().replace(/^\S+ /, "")),
+    ).toEqual([
+      "Front door · Unlocked by Keypad",
+      "Front door · Open",
+      "Front door · Closed",
+      "Front door · Locked by One-touch",
+    ]);
+  });
+
+  test("without camera: the entry keeps its own row", async () => {
+    const m = await mount({
+      config: {
+        entities: [
+          { entity: "lock.front_door", name: "Front door", actor_attribute: "changed_by" },
+          { entity: "binary_sensor.front_door", name: "Front door" },
+          "person.alex",
+        ],
+      },
+    });
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    expect(root(m).querySelector(".chain")).toBeNull();
+    expect(
+      rows(m).some(
+        (r) =>
+          (r.dataset.id ?? "").startsWith("burst:") &&
+          r.textContent.includes("Unlocked · Open · Closed · Locked"),
+      ),
+    ).toBe(true);
+  });
+});

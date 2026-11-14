@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ContextBand } from "../src/core/context";
 import { inAnyBand } from "../src/core/context";
-import { allOf, applyFilters, countRows, isUnreviewed } from "../src/core/filters";
+import { allOf, applyFilters, countRows, isUnreviewed, visibleRows } from "../src/core/filters";
 import { groupTimeline } from "../src/core/grouping";
 import type { TimelineItem } from "../src/core/grouping";
 import type { Presence } from "../src/core/presence";
@@ -124,5 +124,54 @@ describe("per-event chips", () => {
     expect(isUnreviewed(ev({ start: T0, reviewed: false }))).toBe(false);
     expect(isUnreviewed(review("x", T0, false))).toBe(true);
     expect(isUnreviewed(review("y", T0, true))).toBe(false);
+  });
+});
+
+describe("changes attached to a camera row (PLAN §5.3)", () => {
+  // A camera group of two reviews (10:00 and 10:02) with the front door, configured next to
+  // the drive camera, opened and closed at 10:01–10:02; a lone review at 15:00.
+  const nearDrive = (e: ReelEvent) => ({ ...e, nearCamera: "camera.drive" });
+  const attachedItems = groupTimeline(
+    [
+      review("a1", at(10), false),
+      review("a2", at(10, 2), true),
+      nearDrive(door("ad1", at(10, 1), "Open")),
+      nearDrive(door("ad2", at(10, 2), "Closed")),
+      review("a3", at(15), false),
+    ],
+    { window: 120 },
+  );
+
+  it("folds the door into the camera group, leaving two rows", () => {
+    expect(attachedItems).toHaveLength(2);
+    const group = attachedItems.find((i) => i.kind === "camera");
+    expect(group?.attached?.events.map((e) => e.id)).toEqual(["ad1", "ad2"]);
+  });
+
+  it("finds the camera row with the Doors chip", () => {
+    const out = applyFilters(attachedItems, { categories: new Set(["door"]) });
+    expect(ids(out)).toEqual([["a1", "a2"]]);
+  });
+
+  it("counts attached changes against max_events", () => {
+    // Newest first: the lone review (1 event), then the group (2 reviews + 2 door changes =
+    // 4). A limit of 1 hides the whole group; a limit of 2 keeps it, since a group across the
+    // limit is kept whole.
+    expect(visibleRows(attachedItems, { categories: new Set() }, 1).hidden).toBe(4);
+    expect(visibleRows(attachedItems, { categories: new Set() }, 2).hidden).toBe(0);
+  });
+
+  it("keeps the attachment when a per-event chip narrows the group", () => {
+    // Unreviewed narrows the group to a1, a row of its own, which still shows the door.
+    const out = applyFilters(attachedItems, { categories: new Set() }, isUnreviewed);
+    const row = out.find((i) => i.kind === "event" && i.event.id === "a1");
+    expect(row?.attached?.events.map((e) => e.id)).toEqual(["ad1", "ad2"]);
+  });
+
+  it("keeps a camera row the Doors chip found when a per-event chip is picked too", () => {
+    // Doors + Unreviewed: the door changes aren't reviews, but the row is kept for them and
+    // narrows by Unreviewed alone, to a1.
+    const out = applyFilters(attachedItems, { categories: new Set(["door"]) }, isUnreviewed);
+    expect(ids(out)).toEqual([["a1"]]);
   });
 });

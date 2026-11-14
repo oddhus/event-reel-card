@@ -167,7 +167,7 @@ cameras:
 | `filters` | `true` | Show the category chips, the camera menu, the context band chips, and the "Unreviewed" and "Nobody home" chips (the latter with `presence` on). |
 | `day_strip` | `true` | Show the 24-hour strip. |
 | `day_navigation` | `true` | Show the ‹ › buttons for earlier days. A past day runs from midnight to midnight. How far back it finds events depends on how long each source keeps them; the recorder keeps 10 days by default. |
-| `entities` | none | Entities whose state changes appear. An item is an entity id or an object with `entity`, `name`, `icon`, `category`, `states` (labels per state), `only_states` and `actor_attribute`. |
+| `entities` | none | Entities whose state changes appear. An item is an entity id or an object with `entity`, `name`, `icon`, `category`, `states` (labels per state), `only_states`, `actor_attribute` and `camera`. See [Doors next to a camera](#doors-next-to-a-camera). |
 | `llmvision` | auto | `true`, `false`, or an object with `non_camera` (default `true`), `categories` and `enabled`. |
 | `frigate` | auto | `true`, `false`, or an object with `cameras` (`auto` or a list), `severity` (default `[alert, detection]`), `show_unmatched` (default `true`), `hide_unconfirmed` (default `false`), `clip_padding` (default `[10, 20]` seconds) and `enabled`. |
 | `event_reel` | auto | `true` or `false`: AI descriptions from the Event Reel integration. |
@@ -231,6 +231,29 @@ out; list the people instead to keep someone like that counted as possibly home 
 that doesn't exist is ignored). A row shows up to three initials, or two and
 a count when more people were home. The visual editor has a switch for `presence: true`,
 and keeps a list written in YAML.
+
+### Doors next to a camera
+
+Give a door or lock the camera that watches it, and its changes join that camera's row
+instead of taking a row of their own: "Person arrives home" gets a line with "Front door:
+Unlocked · Open · Closed · Locked" under it, and opening the row lists each change with who
+made it.
+
+```yaml
+entities:
+  - entity: lock.front_door
+    actor_attribute: changed_by
+    camera: camera.entrance
+  - entity: binary_sensor.front_door
+    camera: camera.entrance
+```
+
+The changes join a row of that camera when they lie within `grouping.window` (120 s by
+default) of it; the nearest row wins. A run of changes that mixes entities with different
+cameras, or with none, keeps its own row, and so do changes with no camera row near them.
+The Doors and Locks chips still find a row by its attached changes. `camera` takes a
+camera entity id, or a name from `camera_aliases`, and is YAML only; the visual editor
+keeps it.
 
 ### Running next to an automation
 

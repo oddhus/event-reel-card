@@ -269,8 +269,13 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     title: "Today's events",
     density: "compact",
     entities: [
-      { entity: "lock.front_door", name: "Front door", actor_attribute: "changed_by" },
-      { entity: "binary_sensor.front_door", name: "Front door" },
+      {
+        entity: "lock.front_door",
+        name: "Front door",
+        actor_attribute: "changed_by",
+        camera: "camera.entrance",
+      },
+      { entity: "binary_sensor.front_door", name: "Front door", camera: "camera.entrance" },
       "person.alex",
     ],
     ...(withLlmVision ? { llmvision: { non_camera: false } } : {}),

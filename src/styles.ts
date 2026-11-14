@@ -242,6 +242,24 @@ export const styles = css`
   .state {
     color: var(--secondary-text-color);
   }
+  /* Door or lock changes attached to a camera row (§5.3): one line under the title. */
+  .chain {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    font-size: 0.8em;
+    color: var(--secondary-text-color);
+    --mdc-icon-size: 14px;
+  }
+  .chain ha-icon {
+    flex: none;
+  }
+  .chain > span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .badge {
     display: inline-block;
     margin-right: 6px;
@@ -416,6 +434,14 @@ export const styles = css`
     }
     .sub {
       display: block;
+    }
+    /* A narrow row shows the chain on up to three lines, as a burst row does. */
+    .chain > span {
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
     }
     /* The threat badge moves to the camera/duration line, so the title stays readable. */
     .title .badge.threat-1,
