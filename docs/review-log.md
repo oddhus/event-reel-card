@@ -246,3 +246,16 @@ GPT-6-sol (xhigh). Fixed:
   `:focus-within` fallback where `:has()` is missing (Firefox ESR 115).
 - The CHANGELOG says the icon applies in any card up to 600 px wide, which includes a
   sections column on a desktop, not only a phone.
+
+**2026-11-14, "Unreviewed" and "Nobody home" chips.** Three rounds by a fresh Fable 5.2
+context and GPT-6-sol (xhigh). Fixed:
+- Marking a row reviewed while "Unreviewed" is picked hid the row and lost focus; focus now
+  moves to the nearest row still shown, and the open detail closes.
+- A camera group showed the blue dot only when its first review was unreviewed; any one now
+  counts.
+- A picked chip vanished on a day with no matching rows, so it could not be switched off; the
+  bar stays up while a chip is picked.
+- An open row that a chip or the camera menu hides is closed, so it doesn't reopen with its
+  media when the filter is cleared.
+- The browser tests took their expected counts from the card's own indicators; they now come
+  from the fixture, with one review marked reviewed. The third round found nothing.
