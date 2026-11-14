@@ -11,7 +11,7 @@ import type { ExampleData } from "./fixtures/example";
 import { createMockHass } from "./mock-hass";
 import type { WsHandler } from "./mock-hass";
 
-export interface MountOptions {
+export type MountOptions = {
   /** Pins the clock: an ISO time or epoch seconds. Leave out for the real clock. */
   now?: string | number;
   /** Where the card goes; `document.body` when left out. */
@@ -30,9 +30,9 @@ export interface MountOptions {
   live?: boolean;
   /** Private snapshots by name (`llmvision`, `logbook`), used with `live`. */
   local?: (name: string) => unknown;
-}
+};
 
-export interface Mounted {
+export type Mounted = {
   card: EventReelCard;
   /** The container the card is in. */
   stage: HTMLElement;
@@ -40,7 +40,7 @@ export interface Mounted {
   /** Sets a new `hass` with another language or theme, as the harness's controls do. */
   setHass(opts: { language?: string; dark?: boolean }): void;
   remove(): void;
-}
+};
 
 /** The sources `slow` can hold back, by the request that fetches them. */
 const slowKeys: Record<string, string> = {
@@ -142,6 +142,9 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     </svg>`,
     )}`;
 
+  /** A websocket message field as text: the mock only gets strings and numbers. */
+  const text = (v: unknown) => (typeof v === "string" || typeof v === "number" ? String(v) : "");
+
   const inRange = (t: number, msg: Record<string, unknown>) =>
     t >= Number(msg.after ?? -Infinity) && t <= Number(msg.before ?? Infinity);
 
@@ -149,12 +152,13 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     "call_service:llmvision.get_events": () => ({
       response: {
         events:
-          (live && (local("llmvision") as typeof data.llmvision | undefined)) || data.llmvision,
+          (live ? (local("llmvision") as typeof data.llmvision | undefined) : undefined) ??
+          data.llmvision,
       },
     }),
     "event_reel/events/list": (msg) => {
-      const start = msg.start_time ? Date.parse(String(msg.start_time)) / 1000 : -Infinity;
-      const end = msg.end_time ? Date.parse(String(msg.end_time)) / 1000 : Infinity;
+      const start = msg.start_time ? Date.parse(text(msg.start_time)) / 1000 : -Infinity;
+      const end = msg.end_time ? Date.parse(text(msg.end_time)) / 1000 : Infinity;
       return {
         events: data.eventReel
           .filter((e) => {
@@ -168,9 +172,9 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     "frigate/reviews/get": async (msg) => {
       if (live) {
         const q = new URLSearchParams({
-          after: String(msg.after),
-          before: String(msg.before),
-          limit: String(msg.limit ?? 200),
+          after: text(msg.after),
+          before: text(msg.before),
+          limit: text(msg.limit ?? 200),
         });
         if (msg.reviewed !== undefined) q.set("reviewed", msg.reviewed ? "1" : "0");
         return (await fetch(`/frigate-api/review?${q}`)).text();
@@ -184,10 +188,10 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
       );
     },
     "logbook/get_events": (msg) => {
-      const start = Date.parse(String(msg.start_time)) / 1000;
-      const end = Date.parse(String(msg.end_time)) / 1000;
+      const start = Date.parse(text(msg.start_time)) / 1000;
+      const end = Date.parse(text(msg.end_time)) / 1000;
       const entries =
-        (live && (local("logbook") as typeof data.logbook | undefined)) || data.logbook;
+        (live ? (local("logbook") as typeof data.logbook | undefined) : undefined) ?? data.logbook;
       return entries.filter((e) => {
         const t = typeof e.when === "number" ? e.when : Date.parse(e.when) / 1000;
         return t >= start && t <= end;

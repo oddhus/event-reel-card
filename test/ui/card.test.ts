@@ -21,12 +21,18 @@ async function mount(opts: MountOptions = {}) {
   return mounted;
 }
 
-const root = (m: Mounted) => m.card.shadowRoot!;
+/** The value, or a failed test when it is missing. */
+function must<T>(value: T | null | undefined, what = "element"): T {
+  if (value == null) throw new Error(`no ${what}`);
+  return value;
+}
+
+const root = (m: Mounted) => must(m.card.shadowRoot, "shadow root");
 const rows = (m: Mounted) => [...root(m).querySelectorAll<HTMLElement>("button.row")];
-const ids = (m: Mounted) => rows(m).map((r) => r.dataset.id!);
+const ids = (m: Mounted) => rows(m).map((r) => r.dataset.id ?? "");
 const items = (m: Mounted) => root(m).querySelectorAll(".list > [role=listitem]");
 const status = (m: Mounted) =>
-  root(m).querySelector("[role=status].empty")?.textContent?.trim() ?? "";
+  root(m).querySelector("[role=status].empty")?.textContent.trim() ?? "";
 
 /** Waits until `check` holds, polling each frame, or fails after `ms`. */
 async function until(check: () => boolean, ms = 5000) {
@@ -72,7 +78,7 @@ describe("rows", () => {
     await userEvent.click(a);
     await m.card.updateComplete;
     expect(a.getAttribute("aria-expanded")).toBe("true");
-    expect(root(m).getElementById(a.getAttribute("aria-controls")!)).not.toBeNull();
+    expect(root(m).getElementById(a.getAttribute("aria-controls") ?? "")).not.toBeNull();
 
     await userEvent.click(b);
     await m.card.updateComplete;
@@ -108,10 +114,12 @@ describe("filters (PLAN §5.1)", () => {
     const m = await mount();
     await until(() => ids(m).some((id) => id.startsWith("frigate:")));
     const all = items(m).length;
-    const chip = [...root(m).querySelectorAll<HTMLElement>(".fchip:not(.bandchip)")].find((c) =>
-      c.textContent!.includes(en["category.door"]),
-    )!;
-    const count = Number(chip.querySelector(".n")!.textContent);
+    const chips = [...root(m).querySelectorAll<HTMLElement>(".fchip:not(.bandchip)")];
+    const chip = must(
+      chips.find((c) => c.textContent.includes(en["category.door"])),
+      "Doors chip",
+    );
+    const count = Number(chip.querySelector(".n")?.textContent);
     expect(chip.getAttribute("aria-pressed")).toBe("false");
 
     await userEvent.click(chip);
@@ -142,10 +150,10 @@ describe("day navigation (PLAN §5.1, §3.7)", () => {
     const observer = new MutationObserver(record);
     observer.observe(root(m), { subtree: true, childList: true, attributes: true });
 
-    await userEvent.click(root(m).querySelector<HTMLElement>(".navbtn.prev")!);
+    await userEvent.click(must(root(m).querySelector<HTMLElement>(".navbtn.prev")));
     await m.card.updateComplete;
     record();
-    expect(root(m).querySelector(".daylabel")!.textContent!.trim()).toBe(en["nav.yesterday"]);
+    expect(root(m).querySelector(".daylabel")?.textContent.trim()).toBe(en["nav.yesterday"]);
 
     // Wait for every source (2 s), then a little longer.
     await sleep(2600);
