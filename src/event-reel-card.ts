@@ -1240,7 +1240,7 @@ export class EventReelCard extends LitElement {
     const open = this._openId;
     if (!open) return;
     const listed = this._visible(next).list.some((item) =>
-      itemEvents(item).some((e) => e.id === open || !!e.aliases?.includes(open)),
+      allItemEvents(item).some((e) => e.id === open || !!e.aliases?.includes(open)),
     );
     if (!listed) this._openId = undefined;
   }
