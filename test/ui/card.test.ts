@@ -298,4 +298,22 @@ describe("phone width", () => {
       await page.viewport(1024, 900);
     }
   });
+
+  test("from 481 to 600 px the title keeps room, the camera line under it", async () => {
+    // PLAN §5.2: up to 600 px the camera/duration text goes under the title. Before, a 481 px
+    // card put it in a column and left the title about 130 px (80 px in comfortable).
+    for (const density of ["compact", "comfortable"] as const) {
+      for (const width of [481, 560, 600]) {
+        const m = await mount({ width, config: { density } });
+        await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+        await m.card.updateComplete;
+        const titles = rows(m).map((r) => must(r.querySelector<HTMLElement>(".title")).clientWidth);
+        expect(Math.min(...titles), `${density} at ${width} px`).toBeGreaterThanOrEqual(180);
+        const meta = must(root(m).querySelector<HTMLElement>(".row.camera .meta"));
+        expect(getComputedStyle(meta).display).toBe("none");
+        m.remove();
+        mounted = undefined;
+      }
+    }
+  });
 });

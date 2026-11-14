@@ -680,7 +680,9 @@ Later:
   with an ellipsis, which left a phone with the first word or two, and a 481 px card no
   better.) In compact mode the description appears only when the row is expanded.
 - The right side shows the camera name, duration, a face/person chip, the actor when
-  known, and a blue dot when unreviewed.
+  known, and a blue dot when unreviewed. In a card up to 600 px wide (a phone, or a sections
+  view column) that text moves to a line under the title instead: with the column, a card of
+  481–600 px left the title under 130 px, 80 px in comfortable density with presence.
 - A Frigate GenAI threat level of 1 or more shows as a badge ("Suspicious", "Security
   concern") before the title, or at the start of the camera/duration line on narrow
   layouts so the title stays readable. A camera group row shows its highest level.

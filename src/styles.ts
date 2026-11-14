@@ -362,7 +362,10 @@ export const styles = css`
     }
   }
 
-  @container (max-width: 480px) {
+  /* A card up to 600 px wide: the camera, duration and actor go to a line under the title
+     instead of a column on the right, and the threat badge with them. With that column, a
+     card of 481–600 px left the title under 130 px (80 px in comfortable with presence). */
+  @container (max-width: 600px) {
     .row {
       gap: 8px;
       padding: 4px 10px 4px 12px;
