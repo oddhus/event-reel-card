@@ -731,6 +731,24 @@ describe("changes attached to a camera row (PLAN §5.3)", () => {
     }
   });
 
+  test("a linked change closed with Escape doesn't open its camera row when it loads", async () => {
+    try {
+      const { m, own } = await linkLoneLock();
+      must(own()).focus();
+      await userEvent.keyboard("{Escape}");
+      await m.card.updateComplete;
+      expect(own()?.getAttribute("aria-expanded")).toBe("false");
+
+      m.release("frigate");
+      m.release("llmvision");
+      await until(() => !!leavesRow(m));
+      await sleep(300);
+      expect(leavesRow(m)?.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      history.replaceState(null, "", location.pathname);
+    }
+  });
+
   test("an open burst moving onto a camera row leaves the open detail alone", async () => {
     const m = await mount({ hold: ["frigate", "llmvision"] });
     await userEvent.click(await entryBurst(m));

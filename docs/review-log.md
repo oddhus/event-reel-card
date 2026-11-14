@@ -259,3 +259,21 @@ context and GPT-6-sol (xhigh). Fixed:
   media when the filter is cleared.
 - The browser tests took their expected counts from the card's own indicators; they now come
   from the fixture, with one review marked reviewed. The third round found nothing.
+
+**2026-11-14, door and lock changes on camera rows.** Three rounds by a fresh Fable 5.2
+context and GPT-6-sol (xhigh). Round 1 found that a deep link lost its step when the camera
+loaded after the change, and that a filter narrowing a camera group kept changes whose
+event it no longer showed; both fixed. Rounds 2 and 3 were about following a change that
+moves onto a camera row when that camera's sources answer late. Fixed:
+- An open change, an open burst, or a linked step follows to its camera row once; closing
+  that row sticks, even when the row's id changes because another review grouped in.
+- A burst whose changes split (some join the camera row, the rest stay a burst) opens every
+  row that took a change and keeps the remaining burst open.
+- A refresh never takes the open detail from the row the user is looking at, never opens a
+  row the current filter hides, and a click, Escape or a filter cancels a pending link
+  follow. Closing a group also closes the detail open inside it.
+- The browser tests now force a real recompute (a live state change through the harness's
+  new `setState`), so "closing sticks" is tested, and each fix fails its test without it.
+Rebutted: a camera row is sorted and labelled by its camera event, not by its latest
+attached change. Left open: with a very small `max_events`, a split burst's remaining part
+can fall under the cap.

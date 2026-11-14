@@ -970,6 +970,7 @@ export class EventReelCard extends LitElement {
         return !already;
       }
       if (this._openGroups.has(host.id)) return false;
+      if (!takeDetail && !shown(host)) return false;
       this._openGroups = new Set([...this._openGroups, host.id]);
       return true;
     };
@@ -1141,8 +1142,16 @@ export class EventReelCard extends LitElement {
   private _toggleGroup(id: string) {
     this._linkedFollowed = true;
     const next = new Set(this._openGroups);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+      // Closing a group closes the detail open inside it, which would otherwise open the
+      // group again on the next refresh.
+      const group = this._items.find((i) => i.id === id);
+      const open = this._openId;
+      if (open && group?.kind === "camera" && group.events.some((e) => e.id === open)) {
+        this._openId = undefined;
+      }
+    } else next.add(id);
     this._openGroups = next;
   }
 
@@ -1165,6 +1174,7 @@ export class EventReelCard extends LitElement {
     } else if (ev.key === "Escape" && this._openId) {
       const id = this._openId;
       this._openId = undefined;
+      this._linkedFollowed = true;
       void this.updateComplete.then(() =>
         this.renderRoot
           .querySelector<HTMLElement>(`button.row[data-id="${CSS.escape(id)}"]`)
