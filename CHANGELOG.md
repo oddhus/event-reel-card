@@ -20,6 +20,8 @@ All notable changes to this project are documented here. The project uses
 
 ### Fixed
 
+- An open row that a filter chip or the camera menu hides is closed, so switching the filter
+  off doesn't open it again and start its clip.
 - A Frigate clip whose recording has been deleted ("The recording has been deleted.") no
   longer offers a Download button that can only fail.
 - Long titles wrap to a second line (a door's chain of changes to a third) instead of being
