@@ -94,8 +94,8 @@ Check `git diff --cached` before every commit.
 
 Update the README when usage changes, and add user-facing changes under `Unreleased` in
 [CHANGELOG.md](CHANGELOG.md). Take README screenshots from the dev harness's example
-data. Put design decisions and verified facts in PLAN.md, and review notes (what the reviewers
-found, what changed) in [docs/review-log.md](docs/review-log.md).
+data. Put design decisions and verified facts in PLAN.md, and review notes (what the
+reviewers found, what changed) in [docs/review-log.md](docs/review-log.md).
 Change these instructions when a durable working convention changes.
 
 ## Task references

@@ -225,8 +225,8 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
   `start_time` with `lu` set to `start_time`. During a bounce the attribute of each change
   is on its own row, so the actor comes from the change's row and the attribute-only rows
   after it, up to the next state change. The card asks only for changes without a final
-  answer ([review log](docs/review-log.md)), from 2 s before to 5 s after them, and doesn't hold the rows back more than
-  3 s for it.
+  answer ([review log](docs/review-log.md)), from 2 s before to 5 s after them, and
+  doesn't hold the rows back more than 3 s for it.
 - Drop transitions from or to `unknown`/`unavailable` (restart noise) and attribute-only
   updates.
 - Locks can bounce (unlocked → locked → unlocked within seconds, seen in real data).
