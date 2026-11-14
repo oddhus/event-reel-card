@@ -7,11 +7,12 @@ import type { PropertyValues } from "lit";
 import type HlsType from "hls.js/light";
 import { frigateMedia } from "../core/media";
 import type { MediaResolver } from "../core/media";
-import { countsAsStall, stallVerdict } from "../core/playback";
+import { countsAsStall, offersDownload, stallVerdict } from "../core/playback";
+import type { PlayerStatus } from "../core/playback";
 import type { Localize, MediaRef, ReelEvent } from "../types";
 import { motionAllowed } from "./preview";
 
-type Status = "loading" | "playing" | "codec" | "deleted" | "unavailable";
+type Status = PlayerStatus;
 type FallbackStatus = Exclude<Status, "loading" | "playing">;
 
 /** Cameras whose recordings failed to decode in this session: open them straight in fallback. */
@@ -538,7 +539,7 @@ export class EventReelPlayer extends LitElement {
         }
         <span class="spacer"></span>
         ${
-          this._downloadUrl
+          this._downloadUrl && offersDownload(this._status)
             ? html`<a
                 class="button"
                 href=${this._downloadUrl}

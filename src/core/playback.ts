@@ -13,6 +13,16 @@ const BUFFERED_ENOUGH = 3;
 const HAVE_METADATA = 1;
 const HAVE_FUTURE_DATA = 3;
 
+/** Where a clip stands in the player (§5.4). */
+export type PlayerStatus = "loading" | "playing" | "codec" | "deleted" | "unavailable";
+
+/**
+ * Whether the player offers to download the clip it signed. A deleted recording has no
+ * file to save. A clip that stalled or that the browser can't decode may still download
+ * and play in another player, so those keep the offer.
+ */
+export const offersDownload = (status: PlayerStatus) => status !== "deleted";
+
 export type StallVerdict = "wait" | "unavailable" | "codec";
 
 export type StallState = {

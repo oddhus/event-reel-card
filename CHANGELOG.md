@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The project uses
 
 ## Unreleased
 
+### Fixed
+
+- A Frigate clip whose recording has been deleted ("The recording has been deleted.") no
+  longer offers a Download button that can only fail.
+
 ## [0.6.0] - 2026-10-29
 
 ### Added

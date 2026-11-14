@@ -748,7 +748,9 @@ a compact view.
   the review has a threat level and another AI description joined it). Meta: camera,
   duration, objects, faces, sources ("AI + Frigate"), and the GenAI concerns when present.
 - Actions: **Mark reviewed** (Frigate, P1), **Download** (signed MP4 link with
-  `download`, P1), **Open camera** or **Open entity** (more-info), prev/next event.
+  `download`, P1; hidden once the recording turns out deleted, kept after a stall or a
+  codec failure, `core/playback.ts`), **Open camera** or **Open entity** (more-info),
+  prev/next event.
 - Accessibility: the row's disclosure button is separate from the action buttons. Never
   nest buttons.
 - Keyboard: ↑/↓ move, Enter opens, Esc closes, ←/→ seek.
