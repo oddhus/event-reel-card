@@ -36,6 +36,34 @@ version, the browser or Companion app, the relevant card configuration with your
 replaced, what you expected and what happened, and any errors from the browser console.
 Name the Frigate, Frigate integration or LLM Vision version when the bug involves them.
 
+<a id="add-a-language"></a>
+
+## Adding a language
+
+Translations are welcome. A language is one file in `src/i18n`:
+
+1. Copy `src/i18n/en.ts` to `src/i18n/<code>.ts`, named by the language's base code, such
+   as `de` or `sv`. Type it against English the way `nb.ts` does
+   (`import type { Strings } from "./en";` and `export const de: Strings = { … }`), so lint
+   fails when a key is missing.
+2. Translate the values. Keep the `{placeholders}` as they are, and keep the keys in the
+   order of `en.ts` so later changes are easy to compare.
+3. Register it in `languages` in `src/i18n/index.ts`. With `language: auto` the card
+   follows the Home Assistant language by its base code (`de-CH` → `de`). When other codes
+   should fall back to yours, as `nn` and `no` do to `nb`, add them to `resolveLanguage`
+   there.
+4. Add it to the language choices of the visual editor (`src/editor.ts`), labelled in its
+   own language, and to the `language` row of the README's options table and the language
+   line in its feature list.
+5. Add it to the language menu of the dev harness (`dev/index.html`). Run `npm run lint`,
+   `npm test` and `npm run build`, and look at the card in the harness with the language
+   picked, at phone width too: some languages need more room.
+   Add a line under `Unreleased` in [CHANGELOG.md](CHANGELOG.md).
+
+Later changes add each new key to every language file. Contributors who don't write your
+language use the English text there, so a translation can lag behind; a PR that fills in
+those keys is welcome.
+
 ## Setup and workflow
 
 You need Node 24 (the version CI uses).

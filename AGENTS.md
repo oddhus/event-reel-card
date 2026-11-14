@@ -52,9 +52,9 @@ uses.
 ## Styling, i18n and accessibility
 
 Use HA CSS variables for every color, and check both light and dark themes.
-Keep every user-facing string in `src/i18n`. Add each key to both `en.ts` and `nb.ts`;
-`nb` is typed against `en`, so lint fails when one is missing. If you don't write
-Norwegian, use the English text in `nb.ts` and say so in the PR.
+Keep every user-facing string in `src/i18n`. Add each key to every language file; each is
+typed against `en`, so lint fails when one is missing. Where you don't write the language,
+use the English text and say so in the PR. CONTRIBUTING.md describes adding a language.
 Label every control, keep keyboard access and visible focus, and respect
 `prefers-reduced-motion`.
 
