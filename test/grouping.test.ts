@@ -210,7 +210,7 @@ describe("changes attached to a camera row (PLAN §5.3)", () => {
       "Closed",
       "Locked",
     ]);
-    expect(labels(row.attached!)).toEqual(["Front door: Unlocked · Open · Closed · Locked"]);
+    expect(labels(row.attached ?? { segments: [] })).toEqual(["Front door: Unlocked · Open · Closed · Locked"]);
   });
 
   it("attaches a single change too, when it lies within the window of the review", () => {
