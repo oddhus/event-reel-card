@@ -612,4 +612,64 @@ describe("changes attached to a camera row (PLAN §5.3)", () => {
       ),
     ).toBe(true);
   });
+
+  /** The evening entry (unlock, open, close, lock) before the camera's sources answer. */
+  const entryBurst = async (m: Mounted) => {
+    await until(() => rows(m).some((r) => (r.dataset.id ?? "").startsWith("burst:")));
+    return must(
+      rows(m).find(
+        (r) =>
+          (r.dataset.id ?? "").startsWith("burst:") &&
+          r.textContent.includes("Front door: Unlocked · Open · Closed · Locked"),
+      ),
+      "entry burst",
+    );
+  };
+  const arrivesRow = (m: Mounted) =>
+    must(
+      rows(m).find((r) => r.textContent.includes("Person arrives home")),
+      "entrance row",
+    );
+
+  test("an open entry follows its changes onto the entrance row when the camera answers late", async () => {
+    const m = await mount({ hold: ["frigate", "llmvision"] });
+    await userEvent.click(await entryBurst(m));
+    await m.card.updateComplete;
+    expect(root(m).querySelectorAll(".steps .step")).toHaveLength(4);
+
+    m.release("frigate");
+    m.release("llmvision");
+    await until(() => rows(m).some((r) => r.textContent.includes("Person arrives home")));
+    await m.card.updateComplete;
+    const host = arrivesRow(m);
+    expect(host.getAttribute("aria-expanded")).toBe("true");
+    expect(root(m).querySelectorAll(".steps .step")).toHaveLength(4);
+  });
+
+  test("a link to a change follows it onto the entrance row when the camera answers late", async () => {
+    const m = await mount({ hold: ["frigate", "llmvision"] });
+    // A burst's id names its first change: the unlock.
+    const unlock = (await entryBurst(m)).dataset.id?.slice("burst:".length) ?? "";
+    try {
+      history.replaceState(null, "", `?reel=${encodeURIComponent(unlock)}`);
+      window.dispatchEvent(new Event("location-changed"));
+      await until(() => !!root(m).querySelector(".step.highlight"));
+
+      m.release("frigate");
+      m.release("llmvision");
+      await until(() => rows(m).some((r) => r.textContent.includes("Person arrives home")));
+      await until(() => arrivesRow(m).getAttribute("aria-expanded") === "true");
+      const step = must(root(m).querySelector<HTMLElement>(".step.highlight"), "linked step");
+      expect(step.textContent).toContain("Unlocked");
+
+      // Closing the row sticks: the next refresh doesn't open it again.
+      await userEvent.click(arrivesRow(m));
+      await m.card.updateComplete;
+      m.setHass({});
+      await sleep(300);
+      expect(arrivesRow(m).getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      history.replaceState(null, "", location.pathname);
+    }
+  });
 });

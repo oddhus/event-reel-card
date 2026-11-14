@@ -149,7 +149,7 @@ function eventRow(
       style=${band.style}
       data-id=${opts.groupId ?? e.id}
       aria-expanded=${expanded ? "true" : "false"}
-      aria-controls=${open ? detailId(e.id) : nothing}
+      aria-controls=${open ? (opts.attached ? `steps-${detailId(e.id)} ${detailId(e.id)}` : detailId(e.id)) : nothing}
       @click=${onClick}
     >
       <span class="time">${time(view, opts.time ?? e.start)}</span>
@@ -182,7 +182,7 @@ function eventRow(
           : html`<span class="dot-space"></span>`
       }
     </button>
-    ${open ? html`${opts.attached ? stepsList(view, opts.attached.events) : nothing}${renderDetail(view, e)}` : nothing}
+    ${open ? html`${opts.attached ? stepsList(view, opts.attached.events, `steps-${detailId(e.id)}`) : nothing}${renderDetail(view, e)}` : nothing}
   `;
 }
 
@@ -195,9 +195,9 @@ function attachedLine(attached: Attachment) {
 }
 
 /** Each change of a burst or an attachment, with its time and who made it. */
-function stepsList(view: CardView, events: ReelEvent[]) {
+function stepsList(view: CardView, events: ReelEvent[], id?: string) {
   const t = view.t;
-  return html`<div class="steps">
+  return html`<div class="steps" id=${id ?? nothing}>
     ${events.map(
       (e) =>
         html`<div class="step ${e.id === view.linkedEvent ? "highlight" : ""}">

@@ -22,7 +22,14 @@ export type Attachment = {
   /** Oldest first. */
   events: ReelEvent[];
   segments: BurstSegment[];
+  /** For each event, the id of the row's own event it joined (the nearest one). */
+  anchors: string[];
 };
+
+/** An attachment of `events` (oldest first), each joined to the event in `anchors`. */
+export function attachment(events: ReelEvent[], anchors: string[], bounceWindow = 10): Attachment {
+  return { events, anchors, segments: buildSegments(events, bounceWindow) };
+}
 
 type ItemBase = {
   id: string;
@@ -44,6 +51,8 @@ export type GroupingOptions = {
   window: number;
   /** Seconds within which flips of the same entity collapse into one step. */
   bounceWindow?: number;
+  /** Now, in epoch seconds: a review still running lasts until then. */
+  now?: number;
 };
 
 const BURST_EXCLUDED = new Set(["presence", "calendar"]);
@@ -164,8 +173,10 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
     }
   };
 
-  // Bursts of state changes (doors, locks, …).
-  pushBursts(ascending.filter(isBurstable));
+  // Bursts of state changes (doors, locks, …). Changes of an entity next to a camera
+  // (`camera:`) are chained per camera below, so another door can't pull them off its row.
+  const burstable = ascending.filter(isBurstable);
+  pushBursts(burstable.filter((e) => !e.nearCamera));
 
   // Presence flapping groups per person, never across people.
   const presence = new Map<string, ReelEvent[]>();
@@ -202,73 +213,80 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
     }
   }
 
+  // Changes next to a camera join that camera's rows; the rest burst per camera.
+  const joined = attachNear(items, burstable, opts, bounceWindow);
+  for (const list of joined.leftover.values()) pushBursts(list);
+
   // Everything else stays a row of its own.
   for (const e of ascending) {
     if (!mediaKey(e) && !isBurstable(e) && e.category !== "presence") items.push(eventItem(e));
   }
 
-  return attachNear(items, opts.window, bounceWindow).sort((a, b) => b.sortTime - a.sortTime);
+  return items
+    .map((item) => joined.attached.get(item) ?? item)
+    .sort((a, b) => b.sortTime - a.sortTime);
 }
 
-/** Seconds between two spans; 0 when they overlap. */
-const gapBetween = (a: { start: number; end: number }, b: { start: number; end: number }) =>
-  Math.max(0, a.start - b.end, b.start - a.end);
-
-/** The camera key of a row with media; undefined for plain rows. */
-function cameraOf(item: TimelineItem): string | undefined {
-  if (item.kind === "camera") return item.camera;
-  if (item.kind === "event") return mediaKey(item.event);
-  return undefined;
+/** Seconds from `t` to an event's span; a review still running lasts until `now`. */
+function gapTo(t: number, e: ReelEvent, now: number | undefined): number {
+  const end = e.end ?? (e.frigate && now !== undefined ? Math.max(now, e.start) : e.start);
+  return Math.max(0, e.start - t, t - end);
 }
 
 /**
- * Moves bursts and single state changes onto the camera row they belong to: every event of
- * the burst names the same `nearCamera`, and a row of that camera lies within `window`
- * seconds of it (the nearest wins). A mixed burst, of two cameras or with an entity that has
- * no `camera:`, keeps a row of its own.
+ * Joins each change of an entity next to a camera (`nearCamera`) to the row of that camera
+ * whose own event is nearest to it, within `window` seconds (0 inside a review). Each change
+ * goes on its own, so a long run of changes joins only where it is near a review, and the
+ * changes near no row are returned per camera to burst on their own.
  */
-function attachNear(items: TimelineItem[], window: number, bounceWindow: number): TimelineItem[] {
-  const hosts = new Map<string, TimelineItem[]>();
+function attachNear(
+  items: TimelineItem[],
+  burstable: ReelEvent[],
+  opts: GroupingOptions,
+  bounceWindow: number,
+): { attached: Map<TimelineItem, TimelineItem>; leftover: Map<string, ReelEvent[]> } {
+  const hosts = new Map<string, { item: TimelineItem; event: ReelEvent }[]>();
   for (const item of items) {
-    const key = cameraOf(item);
-    if (!key) continue;
-    const list = hosts.get(key) ?? [];
-    list.push(item);
-    hosts.set(key, list);
+    const own = item.kind === "event" ? [item.event] : item.kind === "camera" ? item.events : [];
+    for (const event of own) {
+      const key = mediaKey(event);
+      if (!key) continue;
+      const list = hosts.get(key) ?? [];
+      list.push({ item, event });
+      hosts.set(key, list);
+    }
   }
-  if (!hosts.size) return items;
 
-  const joined = new Map<TimelineItem, ReelEvent[]>();
-  const moved = new Set<TimelineItem>();
-  for (const item of items) {
-    if (cameraOf(item)) continue;
-    const events = item.kind === "event" ? [item.event] : item.events;
-    const near = events[0].nearCamera;
-    if (!near || events.some((e) => e.nearCamera !== near)) continue;
-    let best: TimelineItem | undefined;
+  const joined = new Map<TimelineItem, { events: ReelEvent[]; anchors: string[] }>();
+  const leftover = new Map<string, ReelEvent[]>();
+  for (const e of burstable) {
+    const camera = e.nearCamera;
+    if (!camera) continue;
+    let best: { item: TimelineItem; event: ReelEvent } | undefined;
     let bestGap = Infinity;
-    for (const host of hosts.get(near) ?? []) {
-      const gap = gapBetween(item, host);
-      if (gap <= window && gap < bestGap) {
+    for (const host of hosts.get(camera) ?? []) {
+      const gap = gapTo(e.start, host.event, opts.now);
+      if (gap <= opts.window && gap < bestGap) {
         best = host;
         bestGap = gap;
       }
     }
-    if (!best) continue;
-    joined.set(best, [...(joined.get(best) ?? []), ...events]);
-    moved.add(item);
+    if (best) {
+      const entry = joined.get(best.item) ?? { events: [], anchors: [] };
+      entry.events.push(e);
+      entry.anchors.push(best.event.id);
+      joined.set(best.item, entry);
+    } else {
+      leftover.set(camera, [...(leftover.get(camera) ?? []), e]);
+    }
   }
-  if (!moved.size) return items;
 
-  return items
-    .filter((item) => !moved.has(item))
-    .map((item) => {
-      const events = joined.get(item);
-      if (!events) return item;
-      const sorted = [...events].sort((a, b) => a.start - b.start);
-      return {
-        ...item,
-        attached: { events: sorted, segments: buildSegments(sorted, bounceWindow) },
-      };
+  const attached = new Map<TimelineItem, TimelineItem>();
+  for (const [item, entry] of joined) {
+    attached.set(item, {
+      ...item,
+      attached: attachment(entry.events, entry.anchors, bounceWindow),
     });
+  }
+  return { attached, leftover };
 }

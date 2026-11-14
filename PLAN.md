@@ -728,17 +728,22 @@ a compact view.
 - Tap a group to expand it.
 - **Attached to a camera row** (done after 0.6.0): an entity with `camera:` (mapped through
   `camera_aliases`) gives its events `nearCamera` (not `camera`, which means "has media" and
-  would make the change a camera row). After grouping, a burst or a single change whose
-  events all name the same camera moves onto a row of that camera (an event with media or
-  a camera group) within `grouping.window` of it, the nearest by the gap between their
-  spans (0 when they overlap). The row gets `attached` (events and burst segments): a line
-  with the chain under its title, and the steps with times and actors when opened. A mixed
-  burst, or one with no camera row in reach, keeps its row. Opt-in only: there is no
-  automatic pairing by area, since a wrong pairing hides a door change under another
-  camera. Category chips, `max_events` and deep links count attached changes
-  (`allItemEvents`); band edges, presence marks, the per-event chips and the strip read
-  only the row's own events, which lie within the window of the attached ones. A deep link
-  to an attached change opens its row and highlights the step.
+  would make the change a camera row). Such changes are kept out of the plain bursts. Each
+  joins the row (an event with media or a camera group) holding the event of that camera
+  nearest to it, measured from the change to the event's span (0 inside it; a Frigate
+  review still running lasts until now), when that is within `grouping.window`. So a long
+  run of changes joins only where it is near a review, and another door changing close by
+  can't pull it off the row (both found in review). The rest burst per camera, as before.
+  The row gets `attached` (events, burst segments, and per change its anchor: the row's
+  event it joined): a line with the chain under its title, and the steps with times and
+  actors when opened. A filter that narrows a camera group keeps the changes whose anchor
+  it still shows. Opt-in only: there is no automatic pairing by area, since a wrong pairing
+  hides a door change under another camera. Category chips, `max_events` and deep links
+  count attached changes (`allItemEvents`); band edges, presence marks, the per-event chips
+  and the strip read only the row's own events, which lie within the window of the attached
+  ones. A deep link to an attached change opens its row and highlights the step. A change
+  that was open, in an open burst, or linked to before its camera's event loaded moves with
+  it: the card opens the camera row instead (`_followAttached`), once, so closing it sticks.
 
 ### 5.4 Expanded detail (inline accordion; one open at a time)
 

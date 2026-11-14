@@ -248,10 +248,12 @@ entities:
     camera: camera.entrance
 ```
 
-The changes join a row of that camera when they lie within `grouping.window` (120 s by
-default) of it; the nearest row wins. A run of changes that mixes entities with different
-cameras, or with none, keeps its own row, and so do changes with no camera row near them.
-The Doors and Locks chips still find a row by its attached changes. `camera` takes a
+Each change joins the row of that camera nearest to it, when it lies within
+`grouping.window` (120 s by default) of the camera's event, or during a review still
+running. Changes with no row of their camera that near keep rows of their own, grouped as
+before; a door without `camera` never pulls another door's changes off a camera row. The
+Doors and Locks chips still find a row by its attached changes, and a filter that narrows
+a camera group keeps only the changes that joined the events it still shows. `camera` takes a
 camera entity id, or a name from `camera_aliases`, and is YAML only; the visual editor
 keeps it.
 

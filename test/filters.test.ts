@@ -161,16 +161,26 @@ describe("changes attached to a camera row (PLAN §5.3)", () => {
     expect(visibleRows(attachedItems, { categories: new Set() }, 2).hidden).toBe(0);
   });
 
-  it("keeps the attachment when a per-event chip narrows the group", () => {
-    // Unreviewed narrows the group to a1, a row of its own, which still shows the door.
-    const out = applyFilters(attachedItems, { categories: new Set() }, isUnreviewed);
-    const row = out.find((i) => i.kind === "event" && i.event.id === "a1");
-    expect(row?.attached?.events.map((e) => e.id)).toEqual(["ad1", "ad2"]);
+  it("keeps only the changes that joined a review the group still shows", () => {
+    // The open at 10:01 joined a1 (40 s after it ended; a2 starts 60 s later), the close at
+    // 10:02 joined a2 (it starts then). Unreviewed narrows the group to a1, which keeps the
+    // open only; a filter that keeps only a2 keeps the close.
+    const unreviewed = applyFilters(attachedItems, { categories: new Set() }, isUnreviewed);
+    const a1 = unreviewed.find((i) => i.kind === "event" && i.event.id === "a1");
+    expect(a1?.attached?.events.map((e) => e.id)).toEqual(["ad1"]);
+    expect(a1?.attached?.segments.map((x) => x.steps.map((st) => st.label))).toEqual([["Open"]]);
+    const reviewed = applyFilters(
+      attachedItems,
+      { categories: new Set() },
+      (e) => e.reviewed === true,
+    );
+    const a2 = reviewed.find((i) => i.kind === "event" && i.event.id === "a2");
+    expect(a2?.attached?.events.map((e) => e.id)).toEqual(["ad2"]);
   });
 
   it("keeps a camera row the Doors chip found when a per-event chip is picked too", () => {
     // Doors + Unreviewed: the door changes aren't reviews, but the row is kept for them and
-    // narrows by Unreviewed alone, to a1.
+    // narrows by Unreviewed alone, to a1 (with the open that joined it).
     const out = applyFilters(attachedItems, { categories: new Set(["door"]) }, isUnreviewed);
     expect(ids(out)).toEqual([["a1"]]);
   });

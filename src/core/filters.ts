@@ -1,8 +1,8 @@
 // Summary counts and filtering for timeline items (PLAN.md §5.1). Pure.
 
 import type { Category, ReelEvent } from "../types";
-import { eventItem, latest, mediaKey, span } from "./grouping";
-import type { TimelineItem } from "./grouping";
+import { attachment, eventItem, latest, mediaKey, span } from "./grouping";
+import type { Attachment, TimelineItem } from "./grouping";
 
 /** Display order of category chips. */
 export const CATEGORY_ORDER: Category[] = [
@@ -194,14 +194,38 @@ export function narrowItems(items: TimelineItem[], hit: (e: ReelEvent) => boolea
     } else {
       const events = item.events.filter(hit);
       if (events.length === item.events.length) out.push(item);
-      // A group narrowed to one event keeps its attached changes.
-      else if (events.length === 1) out.push({ ...eventItem(events[0]), attached: item.attached });
-      else if (events.length) {
-        out.push({ ...item, events, sortTime: latest(events), ...span(events) });
+      // A narrowed group keeps the attached changes that joined one of its remaining events.
+      else if (events.length === 1) {
+        out.push({ ...eventItem(events[0]), attached: narrowAttachment(item.attached, events) });
+      } else if (events.length) {
+        out.push({
+          ...item,
+          events,
+          sortTime: latest(events),
+          ...span(events),
+          attached: narrowAttachment(item.attached, events),
+        });
       }
     }
   }
   return out.sort((a, b) => b.sortTime - a.sortTime);
+}
+
+/** The attached changes that joined one of `events`; undefined when none did. */
+function narrowAttachment(
+  attached: Attachment | undefined,
+  events: ReelEvent[],
+): Attachment | undefined {
+  if (!attached) return undefined;
+  const ids = new Set(events.map((e) => e.id));
+  const keep = attached.events.flatMap((e, i) =>
+    ids.has(attached.anchors[i]) ? [{ e, anchor: attached.anchors[i] }] : [],
+  );
+  if (!keep.length) return undefined;
+  return attachment(
+    keep.map((k) => k.e),
+    keep.map((k) => k.anchor),
+  );
 }
 
 /**

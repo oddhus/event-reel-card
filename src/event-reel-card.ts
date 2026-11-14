@@ -199,6 +199,8 @@ export class EventReelCard extends LitElement {
   private _chipbar?: { el: HTMLElement; observer: ResizeObserver; onScroll: () => void };
   /** A burst member opened by a deep link, highlighted inside the expanded burst. */
   private _linkedEvent?: string;
+  /** The camera row the linked change was last opened on, so closing it sticks. */
+  private _linkedHost?: string;
   /**
    * The last row opened or linked to. The list reaches it past `max_events`, so it doesn't
    * vanish when it closes or newer events push it down; a day switch clears it.
@@ -726,6 +728,7 @@ export class EventReelCard extends LitElement {
     this._highlight = undefined;
     this._stripCursor = undefined;
     this._linkedEvent = undefined;
+    this._linkedHost = undefined;
     this._reach = undefined;
     this._lastEarlier = undefined;
     this._hadItems = false;
@@ -788,7 +791,7 @@ export class EventReelCard extends LitElement {
         .filter((e) => (e.end ?? e.start) >= start && e.start < end)
         .sort((a, b) => b.start - a.start),
     );
-    const items = groupTimeline(visible, { window: cfg.groupingWindow });
+    const items = groupTimeline(visible, { window: cfg.groupingWindow, now: clock.now() });
     this._keepOpen(visible, items);
     this._items = items;
     this._resolveDeepLink();
@@ -892,6 +895,7 @@ export class EventReelCard extends LitElement {
     const host = this._items.find((i) => attachedEvents(i).includes(target));
     if (host) {
       this._linkedEvent = target.id;
+      this._linkedHost = host.id;
       if (host.kind === "event") this._openId = host.event.id;
       else this._openGroups = new Set([...this._openGroups, host.id]);
       void this._scrollTo(host.id, "smooth");
@@ -929,6 +933,7 @@ export class EventReelCard extends LitElement {
 
   /** Keeps an open detail open when its event merged into another or joined a camera group. */
   private _keepOpen(events: ReelEvent[], items: TimelineItem[]) {
+    this._followAttached(items);
     const id = this._openId;
     if (!id) return;
     const target = events.find((e) => e.id === id) ?? events.find((e) => e.aliases?.includes(id));
@@ -937,6 +942,49 @@ export class EventReelCard extends LitElement {
     const group = items.find((i) => i.kind === "camera" && i.events.includes(target));
     if (group && !this._openGroups.has(group.id)) {
       this._openGroups = new Set([...this._openGroups, group.id]);
+    }
+  }
+
+  /**
+   * A change that was open, in an open burst, or linked to can move onto a camera row when
+   * that camera's review loads later (§5.3). Open the row it moved to instead, and show the
+   * linked step there.
+   */
+  private _followAttached(items: TimelineItem[]) {
+    const hostOf = (id: string) =>
+      items.find((i) => attachedEvents(i).some((e) => e.id === id || !!e.aliases?.includes(id)));
+    const open = (host: TimelineItem) => {
+      if (host.kind === "event") {
+        const already = this._openId === host.event.id;
+        this._openId = host.event.id;
+        return !already;
+      }
+      if (this._openGroups.has(host.id)) return false;
+      this._openGroups = new Set([...this._openGroups, host.id]);
+      return true;
+    };
+    // An open row that was a single change.
+    const openId = this._openId;
+    const openHost = openId ? hostOf(openId) : undefined;
+    if (openHost) open(openHost);
+    // An open burst, whose id names its first change.
+    for (const id of this._openGroups) {
+      if (!id.startsWith("burst:") || items.some((i) => i.id === id)) continue;
+      const host = hostOf(id.slice("burst:".length));
+      if (!host) continue;
+      const groups = new Set(this._openGroups);
+      groups.delete(id);
+      this._openGroups = groups;
+      open(host);
+    }
+    // A deep-linked step: open its row and bring it into view when it just moved there.
+    // Once it is there, closing the row sticks.
+    const linked = this._linkedEvent;
+    const linkedHost = linked ? hostOf(linked) : undefined;
+    if (linkedHost && linkedHost.id !== this._linkedHost) {
+      this._linkedHost = linkedHost.id;
+      open(linkedHost);
+      void this._scrollTo(linkedHost.id, "smooth");
     }
   }
 

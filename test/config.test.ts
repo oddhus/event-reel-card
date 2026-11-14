@@ -53,6 +53,20 @@ describe("normalizeConfig", () => {
     ]);
   });
 
+  it("keeps camera on an entity, and rejects one that isn't a string", () => {
+    const c = normalizeConfig({
+      type: "x",
+      entities: [{ entity: "lock.front_door", camera: "camera.entrance" }],
+    });
+    expect(c.entities).toEqual([{ entity: "lock.front_door", camera: "camera.entrance" }]);
+    expect(() =>
+      normalizeConfig({
+        type: "x",
+        entities: [{ entity: "lock.front_door", camera: ["camera.entrance"] as never }],
+      }),
+    ).toThrow(/camera.*lock.front_door|lock.front_door.*camera/);
+  });
+
   it("rejects entity items without an id", () => {
     expect(() => normalizeConfig({ type: "x", entities: [{ name: "x" } as never] })).toThrow(
       /entity id/,
