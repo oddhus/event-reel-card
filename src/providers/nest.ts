@@ -205,15 +205,34 @@ export function groupNestHits(hits: NestHit[]): NestVisit[] {
   });
 }
 
-/** The Nest `event.*` entities and their devices. */
+const entityCache = new WeakMap<object, Map<string, string>>();
+
+/** The Nest `event.*` entities and their devices; kept while the registry is the same. */
 export function nestEventEntities(hass: HomeAssistant): Map<string, string> {
+  const cached = entityCache.get(hass.entities);
+  if (cached) return cached;
   const out = new Map<string, string>();
   for (const entry of Object.values(hass.entities)) {
     if (entry.platform === "nest" && entry.entity_id.startsWith("event.") && entry.device_id) {
       out.set(entry.entity_id, entry.device_id);
     }
   }
+  entityCache.set(hass.entities, out);
   return out;
+}
+
+/** The current state of an event entity as a history row: the recorder lags a trigger. */
+function currentRow(hass: HomeAssistant, id: string): NestHistoryRow[] {
+  const st = hass.states[id] as HassEntity | undefined;
+  return st ? [{ s: st.state, a: st.attributes, lu: Date.parse(st.last_updated) / 1000 }] : [];
+}
+
+/** The time of the newest Nest event before `before`, for the empty state. */
+export function latestNestBefore(hass: HomeAssistant, before: number): number | undefined {
+  const times = [...nestEventEntities(hass).keys()]
+    .map((id) => Date.parse((hass.states[id] as HassEntity | undefined)?.state ?? "") / 1000)
+    .filter((t) => Number.isFinite(t) && t < before);
+  return times.length ? Math.max(...times) : undefined;
 }
 
 /** True when a Nest event entity triggered, which means a new row. */
@@ -232,6 +251,9 @@ const CATEGORY: Record<string, Category> = {
   camera_motion: "motion",
   camera_sound: "motion",
 };
+
+/** Object labels the detail translates (`object.*`). */
+const LABEL: Record<string, string | undefined> = { ring: "chime", camera_person: "person" };
 
 function visitTitle(visit: NestVisit, camera: string, localize: Localize): string {
   switch (visit.type) {
@@ -262,7 +284,7 @@ export function createNestEventProvider(): Provider {
         significant_changes_only: false,
       });
       const hits = [...entities].flatMap(([id, deviceId]) =>
-        parseNestHistory(history[id] ?? [], deviceId, range),
+        parseNestHistory([...(history[id] ?? []), ...currentRow(ctx.hass, id)], deviceId, range),
       );
       return groupNestHits(hits).map((visit) => {
         const camera = ctx.cameras.byDevice(visit.deviceId, "nest");
@@ -273,6 +295,7 @@ export function createNestEventProvider(): Provider {
             (n): n is string => !!n,
           ) ?? ctx.localize("provider.nest");
         const media = nestMedia(visit.deviceId, visit.token);
+        const label = LABEL[visit.type];
         return {
           id: `nest:${visit.tokens[0]}`,
           provider: "nest",
@@ -287,7 +310,7 @@ export function createNestEventProvider(): Provider {
           cameraLabel: camera ? undefined : name,
           thumbnail: [media.thumbnail],
           clip: media.clip,
-          labels: [visit.type],
+          labels: label ? [label] : undefined,
           raw: visit,
         };
       });

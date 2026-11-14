@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { NestHistoryRow } from "../src/providers/nest";
-import { groupNestHits, nestSession, parseNestHistory } from "../src/providers/nest";
+import {
+  createNestEventProvider,
+  groupNestHits,
+  latestNestBefore,
+  nestEventsChanged,
+  nestSession,
+  parseNestHistory,
+} from "../src/providers/nest";
+import type { HomeAssistant } from "../src/ha-types";
+import type { ProviderContext } from "../src/types";
 import { iso } from "./helpers";
 
 /** A token as Nest writes it: base64 of `["<session>", "<event>"]`. */
@@ -121,5 +130,109 @@ describe("groupNestHits", () => {
       hit("2026-01-15T07:00:00Z", "camera_person", token("600", "2"), "dev2"),
     ]);
     expect(visits.map((v) => v.deviceId).sort()).toEqual(["dev1", "dev2"]);
+  });
+});
+
+/** A hass with one Nest doorbell (device dev1) and its two event entities. */
+function nestHass(states: Record<string, { state: string; attributes?: Record<string, unknown> }>) {
+  const calls: Record<string, unknown>[] = [];
+  const history: Record<string, NestHistoryRow[]> = {};
+  const hass = {
+    states: Object.fromEntries(
+      Object.entries(states).map(([id, s]) => [
+        id,
+        {
+          entity_id: id,
+          state: s.state,
+          attributes: s.attributes ?? {},
+          last_changed: "",
+          last_updated: "2026-01-15T10:20:00Z",
+        },
+      ]),
+    ),
+    entities: {
+      "event.front_chime": { entity_id: "event.front_chime", device_id: "dev1", platform: "nest" },
+      "event.front_motion": {
+        entity_id: "event.front_motion",
+        device_id: "dev1",
+        platform: "nest",
+      },
+      "event.hall_button": { entity_id: "event.hall_button", device_id: "dev2", platform: "hue" },
+    },
+    devices: { dev1: { id: "dev1", name: "Front door bell", name_by_user: "" } },
+    callWS: (msg: Record<string, unknown>) => {
+      calls.push(msg);
+      return Promise.resolve(history);
+    },
+  } as unknown as HomeAssistant;
+  return { hass, calls, history };
+}
+
+const ctxFor = (hass: HomeAssistant): ProviderContext =>
+  ({
+    hass,
+    cameras: { byDevice: () => undefined, get: () => undefined },
+    localize: (key: string, p?: Record<string, string | number>) =>
+      key === "title.rang_at_camera" ? `Rang at ${p?.camera}` : key,
+    now: iso("2026-01-15T12:00:00Z"),
+  }) as unknown as ProviderContext;
+
+describe("Nest event provider", () => {
+  it("asks history for the Nest event entities only, and adds a trigger the recorder hasn't stored yet", async () => {
+    const ring = token("501", "n:1");
+    const { hass, calls } = nestHass({
+      "event.front_chime": {
+        state: "2026-01-15T10:20:00.000Z",
+        attributes: { event_type: "ring", nest_event_id: ring },
+      },
+    });
+    const rows = await createNestEventProvider().fetch(range, ctxFor(hass));
+    expect(calls).toHaveLength(1);
+    expect((calls[0].entity_ids as string[]).sort()).toEqual([
+      "event.front_chime",
+      "event.front_motion",
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: `nest:${ring}`,
+      aliases: [ring],
+      category: "doorbell",
+      // No camera mapped and an empty name_by_user: the device's own name.
+      title: "Rang at Front door bell",
+      cameraLabel: "Front door bell",
+      labels: ["chime"],
+      clip: { kind: "mp4", path: `media-source://nest/dev1/${ring}`, resolve: true },
+    });
+  });
+
+  it("asks nothing when there are no Nest event entities", async () => {
+    const { hass, calls } = nestHass({});
+    (hass as { entities: unknown }).entities = {};
+    expect(await createNestEventProvider().fetch(range, ctxFor(hass))).toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("nestEventsChanged", () => {
+  const at = (s: string) => nestHass({ "event.front_chime": { state: s } }).hass;
+
+  it("is true for a new trigger", () => {
+    expect(nestEventsChanged(at("2026-01-15T10:00:00Z"), at("2026-01-15T10:20:00Z"))).toBe(true);
+  });
+
+  it("is false when the entity goes unavailable, or only an attribute changes", () => {
+    expect(nestEventsChanged(at("2026-01-15T10:00:00Z"), at("unavailable"))).toBe(false);
+    expect(nestEventsChanged(at("2026-01-15T10:00:00Z"), at("2026-01-15T10:00:00Z"))).toBe(false);
+  });
+});
+
+describe("latestNestBefore", () => {
+  it("is the newest trigger before the range", () => {
+    const { hass } = nestHass({
+      "event.front_chime": { state: "2026-01-14T18:00:00Z" },
+      "event.front_motion": { state: "2026-01-14T20:00:00Z" },
+    });
+    expect(latestNestBefore(hass, range.start)).toBe(iso("2026-01-14T20:00:00Z"));
+    expect(latestNestBefore(hass, iso("2026-01-14T19:00:00Z"))).toBe(iso("2026-01-14T18:00:00Z"));
   });
 });

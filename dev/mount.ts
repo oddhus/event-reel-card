@@ -211,7 +211,11 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
         return t >= start && t <= end;
       });
     },
-    "history/history_during_period": () => ({ ...data.history, ...data.nestEvents }),
+    "history/history_during_period": (msg) => {
+      const all: Record<string, unknown> = { ...data.history, ...data.nestEvents };
+      const ids = Array.isArray(msg.entity_ids) ? (msg.entity_ids as string[]) : Object.keys(all);
+      return Object.fromEntries(ids.filter((id) => id in all).map((id) => [id, all[id]]));
+    },
     "frigate/reviews/viewed": (msg) => {
       const ids = new Set(msg.ids as string[]);
       for (const r of data.reviews) if (ids.has(r.id)) r.has_been_reviewed = true;

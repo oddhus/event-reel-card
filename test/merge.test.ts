@@ -279,11 +279,23 @@ describe("mergeEvents with Nest event rows", () => {
       id: "nest:tokA",
       title: "A courier holds a parcel",
       description: "A courier holds a parcel, described",
-      category: "person",
+      // Nest reported a ring: the row stays a doorbell moment, whatever the AI saw.
+      category: "doorbell",
       clip: clip("tokA"),
     });
     expect(out[0].sources.sort()).toEqual(["event_reel", "nest"]);
     expect(out[0].aliases).toContain("event_reel:A courier holds a parcel");
+  });
+
+  it("joins text whose clip wasn't found, by its Nest token", () => {
+    const noClip = {
+      ...text(t0 + 5, "tokA", "Parcel at the door"),
+      clip: undefined,
+      nestToken: "tokA",
+    };
+    const out = mergeEvents([nestRow(t0, ["tokA"]), noClip], opts(t0 + 600));
+    expect(out.map((e) => e.title)).toEqual(["Parcel at the door"]);
+    expect(out[0].clip).toEqual(clip("tokA"));
   });
 
   it("joins text about a later trigger of the same visit", () => {

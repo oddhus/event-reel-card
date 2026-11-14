@@ -216,6 +216,12 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
     **different** sessions, so a visit is one session on one device, and a ring and the
     person before it meet only in the camera's row group.
   - In 10 days only `ring` and `camera_person` triggered (no motion or sound events).
+  - The provider also reads each entity's current state as a row, since the recorder
+    stores a trigger a few seconds after the state changes; the token dedupe makes it free
+    once history has it. AI text joins by a `nestToken` field (set by LLM Vision and Event
+    Reel even when no clip was found), and a Nest ring keeps the doorbell category.
+  - Known: a visit whose first trigger falls out of the range takes its next token as id
+    until that one does too.
   - Not verified: what a camera without clips plays (the player falls back to the still
     on an error), and `media_source/resolve_media` on these exact tokens (same format as
     the tokens verified above).

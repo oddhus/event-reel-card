@@ -66,6 +66,7 @@ export function llmvisionToEvents(raw: LlmVisionEvent[], ctx: LlmVisionMapContex
       out.push({
         ...base,
         category: category(e) ?? "doorbell",
+        nestToken: cameraName,
         camera: deviceId ? ctx.cameras.byDevice(deviceId, "nest") : undefined,
         clip: media?.clip,
         thumbnail: thumbnail.length ? thumbnail : undefined,

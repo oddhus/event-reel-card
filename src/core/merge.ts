@@ -95,9 +95,10 @@ function collapseSameClip(texts: ReelEvent[]): ReelEvent[] {
 
 const NEST_CLIP = "media-source://nest/";
 
-/** The Nest event token of an AI event's clip, if it has one. */
+/** The Nest event an AI event is about: its token, or the token in its clip's path. */
 const nestToken = (e: ReelEvent) =>
-  e.clip?.path.startsWith(NEST_CLIP) ? e.clip.path.slice(e.clip.path.lastIndexOf("/") + 1) : "";
+  e.nestToken ??
+  (e.clip?.path.startsWith(NEST_CLIP) ? e.clip.path.slice(e.clip.path.lastIndexOf("/") + 1) : "");
 
 /**
  * Nest event rows (§3.2) take the AI text about their own clip, by event token: exact, never
@@ -118,7 +119,11 @@ function joinNest(events: ReelEvent[]): { nest: ReelEvent[]; others: ReelEvent[]
   }
   const nest = rows.map((row) => {
     const texts = joined.get(row)?.sort((a, b) => a.start - b.start);
-    return texts ? mergeGroup(row, texts) : row;
+    if (!texts) return row;
+    const merged = mergeGroup(row, texts);
+    // A ring Nest reported stays a doorbell moment, whatever the AI saw.
+    const ring = [row, ...texts].some((e) => e.category === "doorbell");
+    return ring ? { ...merged, category: "doorbell" as const } : merged;
   });
   return { nest, others };
 }

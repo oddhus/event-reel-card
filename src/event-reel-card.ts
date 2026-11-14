@@ -32,7 +32,7 @@ import type { Category } from "./types";
 import type { HomeAssistant } from "./ha-types";
 import { getLocalize, resolveLanguage } from "./i18n";
 import { createEntityProvider, latestEntityChangeBefore } from "./providers/entity";
-import { createNestEventProvider, nestEventsChanged } from "./providers/nest";
+import { createNestEventProvider, latestNestBefore, nestEventsChanged } from "./providers/nest";
 import { createEventReelProvider, latestEventReelBefore } from "./providers/eventreel";
 import { frigateProvider, latestReviewBefore, markReviewed } from "./providers/frigate";
 import {
@@ -842,6 +842,8 @@ export class EventReelCard extends LitElement {
     if (this._status("frigate") === "active") {
       tasks.push(latestReviewBefore(ctx, range.start).catch(() => undefined));
     }
+    if (this._status("nest") === "active")
+      tasks.push(Promise.resolve(latestNestBefore(hass, range.start)));
     const times = (await Promise.all(tasks)).filter((t): t is number => typeof t === "number");
     if (token !== this._lastEarlierToken || this._items.length || this._day) return; // superseded
     this._lastEarlier = times.length ? Math.max(...times) : undefined;

@@ -822,6 +822,16 @@ describe("changes attached to a camera row (PLAN §5.3)", () => {
 });
 
 describe("Nest events as rows (PLAN §3.2)", () => {
+  test("a new card has them on with Nest and no Frigate", () => {
+    const Card = customElements.get("event-reel-card") as unknown as {
+      getStubConfig(hass: unknown): Record<string, unknown>;
+    };
+    const hass = (components: string[]) => ({ states: {}, config: { components } });
+    expect(Card.getStubConfig(hass(["nest"]))).toEqual({ nest: { events: true } });
+    expect(Card.getStubConfig(hass(["nest", "frigate"]))).toEqual({});
+    expect(Card.getStubConfig(hass([]))).toEqual({});
+  });
+
   test("are off by default, and with `events: true` show the doorbell's own events", async () => {
     const plain = await mount();
     await until(() => ids(plain).some((id) => id.startsWith("frigate:")));
