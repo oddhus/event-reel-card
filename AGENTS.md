@@ -41,7 +41,7 @@ live install before relying on it, and record what you verified in PLAN.md §2.
 The runtime dependencies are `lit` and `hls.js`. Add another only for a clear gain: the
 whole card ships as one file to every dashboard that uses it. Prefer package versions
 that have been published for at least two weeks; Dependabot
-(`.github/dependabot.yml`) waits as long before it proposes an update.
+(`.github/dependabot.yml`) waits as long before it proposes a version update.
 The build puts the LICENSE file of every bundled package at the top of that file
 (`build/third-party-notices.ts`) and fails when one has none. When a dependency inlines
 other packages into its own dist, as hls.js does, list them in `INLINED` there with their
