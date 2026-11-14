@@ -1216,8 +1216,13 @@ export class EventReelCard extends LitElement {
     );
     const filtered = shown.list;
     // A quiet day still shows its bands: the strip, their chips (at 0) and the legend.
+    // A picked chip keeps the bar up on an empty day too, so it can be switched off there.
+    const f = this._filter;
+    const picks =
+      f.categories.size > 0 || !!f.camera || !!f.bands?.size || !!f.unreviewed || !!f.nobodyHome;
     const showBar =
-      this._loaded && (this._items.length > 0 || this._bands.some((b) => b.intervals.length));
+      this._loaded &&
+      (this._items.length > 0 || this._bands.some((b) => b.intervals.length) || picks);
     return html`
       <ha-card .header=${this._config.title || undefined}>
         ${renderDayNav(view)} ${renderWarnings(view)}

@@ -394,3 +394,58 @@ describe("phone width", () => {
     }
   });
 });
+
+describe("Unreviewed and Nobody home chips (PLAN §5.1, §5.10)", () => {
+  const chipByClass = (m: Mounted, cls: string) =>
+    must(root(m).querySelector<HTMLElement>(`.fchip.${cls}`), cls);
+  const rowByIdShows = (m: Mounted, pred: (r: HTMLElement) => boolean) => rows(m).some(pred);
+
+  test("Unreviewed keeps only rows with a review nobody marked, and counts them", async () => {
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    const chip = chipByClass(m, "unreviewedchip");
+    // A row with an unreviewed review shows the blue dot (PLAN §5.2).
+    const dotted = rows(m).filter((r) => r.querySelector(".dot")).length;
+    expect(dotted).toBeGreaterThan(0);
+    expect(Number(chip.querySelector(".n")?.textContent)).toBe(dotted);
+
+    await userEvent.click(chip);
+    await m.card.updateComplete;
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    expect(rows(m).length).toBe(dotted);
+    for (const r of rows(m)) expect(r.querySelector(".dot"), r.dataset.id).not.toBeNull();
+  });
+
+  test("Nobody home keeps only rows flagged with the crossed-out house", async () => {
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    const flagged = rows(m).filter((r) => r.querySelector(".home .nobody")).length;
+    expect(flagged).toBeGreaterThan(0);
+    const chip = chipByClass(m, "nobodychip");
+    expect(Number(chip.querySelector(".n")?.textContent)).toBe(flagged);
+
+    await userEvent.click(chip);
+    await m.card.updateComplete;
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    expect(rows(m).length).toBe(flagged);
+    for (const r of rows(m)) expect(r.querySelector(".home .nobody"), r.dataset.id).not.toBeNull();
+    expect(rowByIdShows(m, (r) => !r.querySelector(".home .nobody"))).toBe(false);
+  });
+
+  test("a picked chip stays on an empty day, so it can be switched off there", async () => {
+    // Without context bands, which would keep the bar up on their own.
+    const m = await mount({ config: { context: [] } });
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    await userEvent.click(chipByClass(m, "unreviewedchip"));
+    await m.card.updateComplete;
+
+    // The example data has nothing yesterday, so the list shows the empty state.
+    await userEvent.click(must(root(m).querySelector<HTMLElement>(".navbtn.prev")));
+    await until(() => status(m) === en["empty.yesterday"]);
+    const chip = chipByClass(m, "unreviewedchip");
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(chip);
+    await m.card.updateComplete;
+    expect(root(m).querySelector(".fchip.unreviewedchip[aria-pressed=true]")).toBeNull();
+  });
+});
