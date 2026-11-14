@@ -125,10 +125,12 @@ describe("filters (PLAN §5.1)", () => {
     await userEvent.click(chip);
     await m.card.updateComplete;
     expect(chip.getAttribute("aria-pressed")).toBe("true");
-    // The front door changes are door events; nothing else is.
-    expect(items(m).length).toBe(count);
+    // The example day has three visits at the front door, each a burst of lock and door
+    // changes. Nothing else is a door: not Alex coming and going, not the cameras.
+    expect(count).toBe(3);
+    expect(items(m)).toHaveLength(3);
     expect(count).toBeLessThan(all);
-    for (const r of rows(m)) expect(r.dataset.id).toMatch(/^(burst:)?entity:/);
+    for (const r of rows(m)) expect(r.dataset.id).toMatch(/^burst:entity:/);
 
     await userEvent.click(chip);
     await m.card.updateComplete;

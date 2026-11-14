@@ -9,7 +9,9 @@ export default defineConfig({
     include: ["test/ui/**/*.test.ts"],
     browser: {
       enabled: true,
-      provider: playwright(),
+      // The example day and the day buttons depend on the time zone; pin it so a test run
+      // anywhere sees the same day as the expectations.
+      provider: playwright({ contextOptions: { timezoneId: "Europe/Oslo" } }),
       headless: true,
       instances: [{ browser: "chromium" }],
       viewport: { width: 1024, height: 900 },
