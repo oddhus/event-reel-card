@@ -197,10 +197,10 @@ export class EventReelCard extends LitElement {
   private _stickyObserver?: ResizeObserver;
   /** The chip bar whose scroll edges are tracked, and what tracks them. */
   private _chipbar?: { el: HTMLElement; observer: ResizeObserver; onScroll: () => void };
-  /** A burst member opened by a deep link, highlighted inside the expanded burst. */
+  /** A burst member or attached change opened by a deep link, highlighted as a step. */
   private _linkedEvent?: string;
-  /** The camera row the linked change was last opened on, so closing it sticks. */
-  private _linkedHost?: string;
+  /** The linked change has been shown on its camera row once, so closing that row sticks. */
+  private _linkedFollowed = false;
   /**
    * The last row opened or linked to. The list reaches it past `max_events`, so it doesn't
    * vanish when it closes or newer events push it down; a day switch clears it.
@@ -728,7 +728,7 @@ export class EventReelCard extends LitElement {
     this._highlight = undefined;
     this._stripCursor = undefined;
     this._linkedEvent = undefined;
-    this._linkedHost = undefined;
+    this._linkedFollowed = false;
     this._reach = undefined;
     this._lastEarlier = undefined;
     this._hadItems = false;
@@ -891,11 +891,14 @@ export class EventReelCard extends LitElement {
     this._clearLinkFromUrl();
     this._filter = { categories: new Set() };
     this._reach = target.id;
+    // A new link replaces the previous one, which must not pull the view any more.
+    this._linkedEvent = undefined;
+    this._linkedFollowed = false;
     // A change attached to a camera row: open that row (a group expands) and point at the step.
     const host = this._items.find((i) => attachedEvents(i).includes(target));
     if (host) {
       this._linkedEvent = target.id;
-      this._linkedHost = host.id;
+      this._linkedFollowed = true;
       if (host.kind === "event") this._openId = host.event.id;
       else this._openGroups = new Set([...this._openGroups, host.id]);
       void this._scrollTo(host.id, "smooth");
@@ -910,6 +913,8 @@ export class EventReelCard extends LitElement {
       return;
     }
     this._openId = target.id;
+    // A lone change that may still move onto its camera row when the camera loads.
+    if (target.nearCamera) this._linkedEvent = target.id;
     if (container) this._openGroups = new Set([...this._openGroups, container.id]);
     void this._scrollTo(target.id, "smooth");
   }
@@ -966,23 +971,43 @@ export class EventReelCard extends LitElement {
     // An open row that was a single change.
     const openId = this._openId;
     const openHost = openId ? hostOf(openId) : undefined;
-    if (openHost) open(openHost);
-    // An open burst, whose id names its first change.
-    for (const id of this._openGroups) {
-      if (!id.startsWith("burst:") || items.some((i) => i.id === id)) continue;
-      const host = hostOf(id.slice("burst:".length));
-      if (!host) continue;
-      const groups = new Set(this._openGroups);
-      groups.delete(id);
-      this._openGroups = groups;
-      open(host);
+    if (openHost) {
+      open(openHost);
+      // The change has no row of its own any more: follow it once, so closing the group sticks,
+      // and keep it reached, so `max_events` keeps its new row.
+      if (openHost.kind !== "event") {
+        this._openId = undefined;
+        this._reach = openId;
+      }
     }
-    // A deep-linked step: open its row and bring it into view when it just moved there.
-    // Once it is there, closing the row sticks.
+    // An open burst some of whose changes moved onto camera rows: open those rows, and keep
+    // open what is left of the burst, whose id changes when its first change moved. The
+    // previous list has the burst's changes, so a row closed after the move stays closed.
+    for (const id of this._openGroups) {
+      if (!id.startsWith("burst:")) continue;
+      const old = this._items.find((i) => i.id === id);
+      if (old?.kind !== "burst") continue;
+      const moved = old.events.filter((e) => hostOf(e.id));
+      if (!moved.length) continue;
+      const groups = new Set(this._openGroups);
+      if (!items.some((i) => i.id === id)) groups.delete(id);
+      for (const e of old.events) {
+        const rest = items.find((i) => i.kind === "burst" && i.events.some((x) => x.id === e.id));
+        if (rest) groups.add(rest.id);
+      }
+      this._openGroups = groups;
+      for (const e of moved) {
+        const host = hostOf(e.id);
+        if (host) open(host);
+      }
+      this._reach = moved[0].id;
+    }
+    // A deep-linked step: open its row and bring it into view the first time it is on one.
+    // After that, closing the row sticks, even when the row's id changes.
     const linked = this._linkedEvent;
-    const linkedHost = linked ? hostOf(linked) : undefined;
-    if (linkedHost && linkedHost.id !== this._linkedHost) {
-      this._linkedHost = linkedHost.id;
+    const linkedHost = linked && !this._linkedFollowed ? hostOf(linked) : undefined;
+    if (linkedHost) {
+      this._linkedFollowed = true;
       open(linkedHost);
       void this._scrollTo(linkedHost.id, "smooth");
     }
