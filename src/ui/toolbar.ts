@@ -132,15 +132,21 @@ export function renderToolbar(view: CardView, items: TimelineItem[], filtered: T
     </div>
     ${
       showCams
-        ? html`<select
-            class="camsel"
-            aria-label=${t("filter.camera")}
-            .value=${live(camera ?? "")}
-            @change=${(ev: Event) => view.setCamera((ev.target as HTMLSelectElement).value)}
-          >
-            <option value="">${t("filter.all_cameras")}</option>
-            ${cams.map((o) => html`<option value=${o.key}>${o.name} (${o.count})</option>`)}
-          </select>`
+        ? // On a phone the menu is an icon until a camera is picked (CSS), so the chips get
+          // the room; the select lies over the icon and opens as usual.
+          html`<span class="camwrap ${camera ? "picked" : ""}"
+            ><ha-icon icon="mdi:cctv" aria-hidden="true"></ha-icon
+            ><select
+              class="camsel"
+              aria-label=${t("filter.camera")}
+              title=${t("filter.camera")}
+              .value=${live(camera ?? "")}
+              @change=${(ev: Event) => view.setCamera((ev.target as HTMLSelectElement).value)}
+            >
+              <option value="">${t("filter.all_cameras")}</option>
+              ${cams.map((o) => html`<option value=${o.key}>${o.name} (${o.count})</option>`)}
+            </select></span
+          >`
         : nothing
     }
     ${
