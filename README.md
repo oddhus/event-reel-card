@@ -255,7 +255,7 @@ before; a door without `camera` never pulls another door's changes off a camera 
 Doors and Locks chips still find a row by its attached changes, and a filter that narrows
 a camera group keeps only the changes that joined the events it still shows. `camera` takes a
 camera entity id, or a name from `camera_aliases`, and is YAML only; the visual editor
-keeps it.
+keeps it. Presence changes (`person`, `device_tracker`) always keep rows of their own.
 
 ### Running next to an automation
 
