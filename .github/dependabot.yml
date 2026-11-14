@@ -1,0 +1,24 @@
+# Dependabot keeps the dependencies and the CI actions current.
+# The cooldown waits until a version has been published for two weeks, as AGENTS.md asks.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
+    groups:
+      # Dev dependencies are bundled into one PR. The runtime dependencies (lit, hls.js)
+      # stay ungrouped, so an hls.js update that fails the inlined-license test
+      # (test/third-party-notices.test.ts) stands alone.
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]   # majors come one per PR
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
