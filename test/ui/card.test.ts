@@ -399,35 +399,58 @@ describe("Unreviewed and Nobody home chips (PLAN §5.1, §5.10)", () => {
   const chipByClass = (m: Mounted, cls: string) =>
     must(root(m).querySelector<HTMLElement>(`.fchip.${cls}`), cls);
 
-  test("Unreviewed keeps only rows with a review nobody marked, and counts them", async () => {
-    const m = await mount();
-    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
-    const chip = chipByClass(m, "unreviewedchip");
-    // A row with an unreviewed review shows the blue dot (PLAN §5.2).
-    const dotted = rows(m).filter((r) => r.querySelector(".dot")).length;
-    expect(dotted).toBeGreaterThan(0);
-    expect(Number(chip.querySelector(".n")?.textContent)).toBe(dotted);
+  const frigateIds = (m: Mounted) => ids(m).filter((id) => id.startsWith("frigate:"));
+  const frigateId = (reviewId: string) => `frigate:frigate:${reviewId}`;
 
+  test("Unreviewed keeps only the reviews nobody marked, and counts them", async () => {
+    // One review of the example day is marked reviewed in Frigate before the card loads.
+    const m = await mount({ hold: ["frigate"] });
+    const reviewed = m.data.reviews[0];
+    reviewed.has_been_reviewed = true;
+    m.release("frigate");
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    const expected = m.data.reviews.filter((r) => !r.has_been_reviewed).map((r) => frigateId(r.id));
+    expect(expected.length).toBe(m.data.reviews.length - 1);
+
+    const chip = chipByClass(m, "unreviewedchip");
+    expect(Number(chip.querySelector(".n")?.textContent)).toBe(expected.length);
     await userEvent.click(chip);
     await m.card.updateComplete;
     expect(chip.getAttribute("aria-pressed")).toBe("true");
-    expect(rows(m).length).toBe(dotted);
-    for (const r of rows(m)) expect(r.querySelector(".dot"), r.dataset.id).not.toBeNull();
+    // Only Frigate rows, and exactly the unreviewed ones.
+    expect(ids(m).every((id) => id.startsWith("frigate:"))).toBe(true);
+    expect([...frigateIds(m)].sort()).toEqual([...expected].sort());
+    expect(ids(m)).not.toContain(frigateId(reviewed.id));
   });
 
-  test("Nobody home keeps only rows flagged with the crossed-out house", async () => {
+  test("Nobody home keeps only the events while nobody was home", async () => {
     const m = await mount();
     await until(() => ids(m).some((id) => id.startsWith("frigate:")));
-    const flagged = rows(m).filter((r) => r.querySelector(".home .nobody")).length;
-    expect(flagged).toBeGreaterThan(0);
-    const chip = chipByClass(m, "nobodychip");
-    expect(Number(chip.querySelector(".n")?.textContent)).toBe(flagged);
+    // From the example's presence history: the house is empty from Sam leaving (Alex left
+    // earlier) until Sam comes back. The first and last 10 minutes aren't flagged (PLAN §5.10).
+    const left = (id: string) =>
+      Math.max(...m.data.history[id].filter((r) => r.s === "not_home").map((r) => r.lu));
+    const empty = { start: Math.max(left("person.alex"), left("person.sam")) + 600 };
+    const back = Math.min(
+      ...["person.alex", "person.sam"].flatMap((id) =>
+        m.data.history[id].filter((r) => r.s === "home" && r.lu > empty.start).map((r) => r.lu),
+      ),
+    );
+    const end = back - 600;
+    const inside = m.data.reviews
+      .filter((r) => r.start_time >= empty.start && r.start_time <= end)
+      .map((r) => frigateId(r.id));
+    expect(inside.length).toBeGreaterThan(0);
 
+    const chip = chipByClass(m, "nobodychip");
     await userEvent.click(chip);
     await m.card.updateComplete;
     expect(chip.getAttribute("aria-pressed")).toBe("true");
-    expect(rows(m).length).toBe(flagged);
+    // Every review inside the empty house shows, and none outside it.
+    expect([...frigateIds(m)].sort()).toEqual([...inside].sort());
+    // Every row left is flagged; the chip counts them.
     for (const r of rows(m)) expect(r.querySelector(".home .nobody"), r.dataset.id).not.toBeNull();
+    expect(Number(chip.querySelector(".n")?.textContent)).toBe(rows(m).length);
   });
 
   test("a picked chip stays on an empty day, so it can be switched off there", async () => {
