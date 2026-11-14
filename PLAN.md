@@ -676,7 +676,7 @@ Later:
 - Camera rows have the animated preview. Non-camera rows have a 28 px icon disc in the
   same slot, so the text lines up.
 - A long title wraps, up to 2 lines for an event and 3 for a burst's chain, and the row
-  grows only when it needs to; an opened row shows all of it. (Until 0.6 it was one line
+  grows only when it needs to; an opened row shows all of it. (Through 0.6.0 it was one line
   with an ellipsis, which left a phone with the first word or two, and a 481 px card no
   better.) In compact mode the description appears only when the row is expanded.
 - The right side shows the camera name, duration, a face/person chip, the actor when
@@ -688,10 +688,10 @@ Later:
   row's time (§5.6).
 
 **Comfortable:** about 72 px, a 112×63 preview, and a two-line description. On a phone (a
-screen up to 600 px wide, a media query) the preview is compact's 64×36 and the row keeps
-its height, which leaves the title column room. The card's own width can't decide this: a
-large phone and a sections view column on a desktop both give a card of 400–480 px, and
-the desktop column keeps the big preview.
+screen up to 600 px wide, a media query) or in a card under 400 px, the preview is
+compact's 64×36 and the row keeps its height, which leaves the title column room. Between
+400 and 480 px the card's own width can't decide: a large phone and a sections view column
+on a desktop both give such a card, and the desktop column keeps the big preview.
 
 ### 5.3 Grouping (`core/grouping.ts`, pure)
 
