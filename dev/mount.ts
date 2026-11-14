@@ -22,6 +22,8 @@ export type MountOptions = {
   config?: Partial<CardConfig>;
   /** Delays a source by seconds, or `"hang"` never answers: `{ frigate: 4 }`. */
   slow?: Record<string, number | "hang">;
+  /** Sources that answer only once `release(source)` is called (for tests). */
+  hold?: string[];
   /** Where AI text comes from. */
   ai?: "llmvision" | "event_reel" | "both";
   language?: string;
@@ -39,6 +41,8 @@ export type Mounted = {
   data: ExampleData;
   /** Sets a new `hass` with another language or theme, as the harness's controls do. */
   setHass(opts: { language?: string; dark?: boolean }): void;
+  /** Lets a source in `hold` answer its requests, now and from then on. */
+  release(source: string): void;
   remove(): void;
 };
 
@@ -233,6 +237,17 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
         ? new Promise(() => undefined)
         : new Promise((resolve) => setTimeout(() => resolve(inner(msg)), seconds * 1000));
   }
+  const gates = new Map<string, () => void>();
+  for (const source of opts.hold ?? []) {
+    const key = slowKeys[source];
+    const inner = key ? handlers[key] : undefined;
+    if (!key || !inner) continue;
+    const gate = new Promise<void>((resolve) => gates.set(source, resolve));
+    handlers[key] = async (msg) => {
+      await gate;
+      return inner(msg);
+    };
+  }
 
   if (live) {
     // Real Frigate camera names come from live data at runtime; nothing private is committed.
@@ -287,5 +302,12 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
   };
   setHass({});
 
-  return { card, stage, data, setHass, remove: () => stage.remove() };
+  return {
+    card,
+    stage,
+    data,
+    setHass,
+    release: (source) => gates.get(source)?.(),
+    remove: () => stage.remove(),
+  };
 }

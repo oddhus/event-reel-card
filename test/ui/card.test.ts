@@ -47,25 +47,24 @@ const loaded = (m: Mounted) => until(() => rows(m).length > 0);
 
 describe("first paint (PLAN §3.7)", () => {
   test("shows Loading… until 1.5 s, the fast sources after it, Frigate when it answers", async () => {
-    const m = await mount({ slow: { frigate: 4 } });
+    const m = await mount({ hold: ["frigate"] });
     const start = performance.now();
 
-    // Before the 1.5 s first-paint wait: only "Loading…", no rows.
+    // Before the 1.5 s first-paint wait: only "Loading…", no rows. (The card's own timer
+    // started before `start`, so this window is inside it.)
     while (performance.now() - start < 1300) {
       expect(rows(m)).toHaveLength(0);
       expect(status(m)).toBe(en.loading);
       await sleep(100);
     }
 
-    // After it: the entity provider's rows, and no Frigate review yet.
-    await sleep(800);
-    expect(ids(m).some((id) => id.startsWith("entity:") || id.startsWith("burst:entity:"))).toBe(
-      true,
-    );
+    // After it: the entity provider's rows, while Frigate still hasn't answered.
+    await until(() => ids(m).some((id) => id.startsWith("entity:") || id.startsWith("burst:")));
     expect(ids(m).some((id) => id.startsWith("frigate:"))).toBe(false);
 
-    // Once Frigate answers (4 s), its reviews join the list.
-    await until(() => ids(m).some((id) => id.startsWith("frigate:")), 4000);
+    // Once Frigate answers, its reviews join the list.
+    m.release("frigate");
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
   });
 });
 
@@ -154,24 +153,24 @@ describe("day navigation (PLAN §5.1, §3.7)", () => {
     const live = new Set(ids(first));
     first.remove();
 
-    // Frigate and LLM Vision still loading the live range when ‹ is clicked.
-    const m = await mount({ slow: { frigate: 3, llmvision: 3 } });
+    // Frigate and LLM Vision are still loading the live range when ‹ is clicked.
+    const m = await mount({ hold: ["frigate", "llmvision"] });
     await until(() => ids(m).some((id) => id.startsWith("entity:") || id.startsWith("burst:")));
-    expect(ids(m).some((id) => id.startsWith("frigate:"))).toBe(false);
-
-    const seen = new Set<string>();
-    const record = () => ids(m).forEach((id) => seen.add(id));
-    const observer = new MutationObserver(record);
-    observer.observe(root(m), { subtree: true, childList: true, attributes: true });
 
     await userEvent.click(must(root(m).querySelector<HTMLElement>(".navbtn.prev")));
     await m.card.updateComplete;
-    record();
     expect(root(m).querySelector(".daylabel")?.textContent.trim()).toBe(en["nav.yesterday"]);
 
-    // The live answers arrive at 3 s and must be dropped; yesterday's own requests start
-    // after them and take 3 s more.
-    await until(() => status(m) === en["empty.yesterday"], 9000);
+    // From here on, under "Yesterday", no row of the live range may show: not the ones on
+    // screen before the click, nor the live answers that arrive after it.
+    const seen = new Set<string>();
+    const record = () => ids(m).forEach((id) => seen.add(id));
+    record();
+    const observer = new MutationObserver(record);
+    observer.observe(root(m), { subtree: true, childList: true, attributes: true });
+    m.release("frigate");
+    m.release("llmvision");
+    await until(() => status(m) === en["empty.yesterday"]);
     await sleep(300);
     record();
     observer.disconnect();
