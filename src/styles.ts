@@ -331,6 +331,12 @@ export const styles = css`
   }
 
   @container (max-width: 480px) {
+    /* Comfortable keeps its description line but takes compact's thumbnail, which leaves
+       the title column room for two lines. */
+    .list.comfortable {
+      --reel-slot-width: 64px;
+      --reel-thumb-height: 36px;
+    }
     .row {
       gap: 8px;
       padding: 4px 10px 4px 12px;
@@ -345,6 +351,21 @@ export const styles = css`
     }
     .sub {
       display: block;
+    }
+    /* A phone's title column is narrow: let titles wrap instead of cutting them off after a
+       few words. Event titles take up to 2 lines, a door's chain of changes up to 3; a row
+       only grows when its title needs the room. */
+    .title {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+    }
+    .row.burst .title {
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
     }
     /* The threat badge moves to the camera/duration line, so the title stays readable. */
     .title .badge.threat-1,

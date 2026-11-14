@@ -675,8 +675,10 @@ Later:
 - The time column is fixed width with tabular numerals.
 - Camera rows have the animated preview. Non-camera rows have a 28 px icon disc in the
   same slot, so the text lines up.
-- The title is one line with an ellipsis. In compact mode the description appears only
-  when the row is expanded.
+- The title is one line with an ellipsis. On narrow layouts (≤ 480 px wide) it wraps
+  instead, up to 2 lines for an event and 3 for a burst's chain, and the row grows only
+  when it needs to. In compact mode the description appears only when the row is
+  expanded.
 - The right side shows the camera name, duration, a face/person chip, the actor when
   known, and a blue dot when unreviewed.
 - A Frigate GenAI threat level of 1 or more shows as a badge ("Suspicious", "Security
@@ -685,7 +687,8 @@ Later:
 - Context highlight (P2, done): a left edge colored by the context band covering the
   row's time (§5.6).
 
-**Comfortable:** about 72 px, a 112×63 preview, and a two-line description.
+**Comfortable:** about 72 px, a 112×63 preview, and a two-line description. On narrow
+layouts the preview is compact's 64×36, which leaves the title column room to wrap.
 
 ### 5.3 Grouping (`core/grouping.ts`, pure)
 

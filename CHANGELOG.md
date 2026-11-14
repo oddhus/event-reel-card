@@ -9,6 +9,9 @@ All notable changes to this project are documented here. The project uses
 
 - A Frigate clip whose recording has been deleted ("The recording has been deleted.") no
   longer offers a Download button that can only fail.
+- On a phone, titles wrap to a second line (a door's chain of changes to a third) instead
+  of being cut off after a few words. Comfortable density uses the smaller thumbnail there,
+  which gives the titles room.
 
 ## [0.6.0] - 2026-10-29
 
