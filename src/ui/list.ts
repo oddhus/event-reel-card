@@ -9,7 +9,7 @@ import { CATEGORY_COLORS, iconFor } from "../core/categories";
 import { bandAt } from "../core/context";
 import { capList, isUnreviewed } from "../core/filters";
 import { homeDuring, whileNobodyHome } from "../core/presence";
-import type { BurstSegment, TimelineItem } from "../core/grouping";
+import type { Attachment, BurstSegment, TimelineItem } from "../core/grouping";
 import { highestThreat, withFlagged } from "../core/threat";
 import { dayKey, formatDay, formatDuration, formatTime, hourStart, shiftDay } from "../core/time";
 import type { ReelEvent } from "../types";
@@ -125,6 +125,8 @@ function eventRow(
     times?: number[];
     /** A group's events, for who was home. */
     events?: ReelEvent[];
+    /** Door or lock changes attached to this camera row (§5.3). */
+    attached?: Attachment;
   } = {},
 ) {
   const t = view.t;
@@ -147,7 +149,7 @@ function eventRow(
       style=${band.style}
       data-id=${opts.groupId ?? e.id}
       aria-expanded=${expanded ? "true" : "false"}
-      aria-controls=${open ? detailId(e.id) : nothing}
+      aria-controls=${open ? (opts.attached ? `steps-${detailId(e.id)} ${detailId(e.id)}` : detailId(e.id)) : nothing}
       @click=${onClick}
     >
       <span class="time">${time(view, opts.time ?? e.start)}</span>
@@ -160,6 +162,7 @@ function eventRow(
               : nothing
           }</span
         >
+        ${opts.attached ? attachedLine(opts.attached) : nothing}
         ${comfortable && e.description ? html`<span class="desc">${e.description}</span>` : nothing}
         ${meta || threat ? html`<span class="sub">${threatBadge}${meta}</span>` : nothing}
         ${band.text}
@@ -179,8 +182,32 @@ function eventRow(
           : html`<span class="dot-space"></span>`
       }
     </button>
-    ${open ? renderDetail(view, e) : nothing}
+    ${open ? html`${opts.attached ? stepsList(view, opts.attached.events, `steps-${detailId(e.id)}`) : nothing}${renderDetail(view, e)}` : nothing}
   `;
+}
+
+/** The chain of changes attached to a camera row, as a line under its title. */
+function attachedLine(attached: Attachment) {
+  const last = attached.events[attached.events.length - 1];
+  return html`<span class="chain"
+    ><ha-icon .icon=${iconFor(last)}></ha-icon><span>${segmentsText(attached.segments)}</span></span
+  >`;
+}
+
+/** Each change of a burst or an attachment, with its time and who made it. */
+function stepsList(view: CardView, events: ReelEvent[], id?: string) {
+  const t = view.t;
+  return html`<div class="steps" id=${id ?? nothing}>
+    ${events.map(
+      (e) =>
+        html`<div class="step ${e.id === view.linkedEvent ? "highlight" : ""}">
+          <span class="time">${time(view, e.start)}</span>
+          <ha-icon .icon=${iconFor(e)}></ha-icon>
+          <span>${e.title}${e.stateLabel ? ` · ${e.stateLabel}` : ""}</span>
+          ${e.actor ? html`<span class="muted">${t("meta.by", { actor: e.actor })}</span>` : nothing}
+        </div>`,
+    )}
+  </div>`;
 }
 
 function segmentsText(segments: BurstSegment[]): string {
@@ -197,7 +224,7 @@ function renderItem(view: CardView, item: TimelineItem): TemplateResult {
   const t = view.t;
   if (item.kind === "event") {
     return html`<div class="item ${view.highlight === item.id ? "highlight" : ""}" role="listitem">
-      ${eventRow(view, item.event)}
+      ${eventRow(view, item.event, { attached: item.attached })}
     </div>`;
   }
 
@@ -232,21 +259,7 @@ function renderItem(view: CardView, item: TimelineItem): TemplateResult {
         ${presenceCell(view, item.events)}
         <span class="dot-space"></span>
       </button>
-      ${
-        open
-          ? html`<div class="steps">
-              ${item.events.map(
-                (e) =>
-                  html`<div class="step ${e.id === view.linkedEvent ? "highlight" : ""}">
-                    <span class="time">${time(view, e.start)}</span>
-                    <ha-icon .icon=${iconFor(e)}></ha-icon>
-                    <span>${e.title}${e.stateLabel ? ` · ${e.stateLabel}` : ""}</span>
-                    ${e.actor ? html`<span class="muted">${t("meta.by", { actor: e.actor })}</span>` : nothing}
-                  </div>`,
-              )}
-            </div>`
-          : nothing
-      }
+      ${open ? stepsList(view, item.events) : nothing}
     </div>`;
   }
 
@@ -269,7 +282,9 @@ function renderItem(view: CardView, item: TimelineItem): TemplateResult {
       events: item.events,
       meta,
       groupId: item.id,
+      attached: item.attached,
     })}
+    ${open && item.attached ? stepsList(view, item.attached.events) : nothing}
     ${open ? groupChildren(view, item.events) : nothing}
   </div>`;
 }

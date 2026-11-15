@@ -559,3 +559,264 @@ describe("Unreviewed and Nobody home chips (PLAN §5.1, §5.10)", () => {
     await until(() => ids(m).length >= all);
   });
 });
+
+describe("changes attached to a camera row (PLAN §5.3)", () => {
+  test("the front door's entry shows on the entrance row, and its steps when opened", async () => {
+    // The harness puts the front door lock and sensor next to camera.entrance; in the example
+    // day someone unlocks, opens, closes and locks it while "Person arrives home" is seen.
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    const host = must(
+      rows(m).find((r) => r.textContent.includes("Person arrives home")),
+      "entrance row",
+    );
+    const chain = must(host.querySelector<HTMLElement>(".chain"), "chain line");
+    expect(chain.textContent.trim()).toBe("Front door: Unlocked · Open · Closed · Locked");
+    // That entry no longer has a row of its own. (Only the bouncing lock at 15:00, with no
+    // entrance review near it, is still a burst.)
+    const bursts = rows(m).filter((r) => (r.dataset.id ?? "").startsWith("burst:"));
+    expect(bursts.map((r) => r.querySelector(".title")?.textContent.trim())).toEqual([
+      "Front door: Unlocked ×5 · Open · Closed · Locked",
+    ]);
+
+    await userEvent.click(host);
+    await m.card.updateComplete;
+    const steps = [...root(m).querySelectorAll<HTMLElement>(".steps .step")];
+    expect(
+      steps.map((s) => s.textContent.replace(/\s+/g, " ").trim().replace(/^\S+ /, "")),
+    ).toEqual([
+      "Front door · Unlocked by Keypad",
+      "Front door · Open",
+      "Front door · Closed",
+      "Front door · Locked by One-touch",
+    ]);
+  });
+
+  test("without camera: the entry keeps its own row", async () => {
+    const m = await mount({
+      config: {
+        entities: [
+          { entity: "lock.front_door", name: "Front door", actor_attribute: "changed_by" },
+          { entity: "binary_sensor.front_door", name: "Front door" },
+          "person.alex",
+        ],
+      },
+    });
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    expect(root(m).querySelector(".chain")).toBeNull();
+    expect(
+      rows(m).some(
+        (r) =>
+          (r.dataset.id ?? "").startsWith("burst:") &&
+          r.textContent.includes("Unlocked · Open · Closed · Locked"),
+      ),
+    ).toBe(true);
+  });
+
+  /** The evening entry (unlock, open, close, lock) before the camera's sources answer. */
+  const entryBurst = async (m: Mounted) => {
+    await until(() => rows(m).some((r) => (r.dataset.id ?? "").startsWith("burst:")));
+    return must(
+      rows(m).find(
+        (r) =>
+          (r.dataset.id ?? "").startsWith("burst:") &&
+          r.textContent.includes("Front door: Unlocked · Open · Closed · Locked"),
+      ),
+      "entry burst",
+    );
+  };
+  const arrivesRow = (m: Mounted) =>
+    must(
+      rows(m).find((r) => r.textContent.includes("Person arrives home")),
+      "entrance row",
+    );
+
+  test("an open entry follows its changes onto the entrance row when the camera answers late", async () => {
+    const m = await mount({ hold: ["frigate", "llmvision"] });
+    await userEvent.click(await entryBurst(m));
+    await m.card.updateComplete;
+    expect(root(m).querySelectorAll(".steps .step")).toHaveLength(4);
+
+    m.release("frigate");
+    m.release("llmvision");
+    await until(() => rows(m).some((r) => r.textContent.includes("Person arrives home")));
+    await m.card.updateComplete;
+    const host = arrivesRow(m);
+    expect(host.getAttribute("aria-expanded")).toBe("true");
+    expect(root(m).querySelectorAll(".steps .step")).toHaveLength(4);
+
+    // Closing it sticks through a live change that rebuilds the list.
+    await userEvent.click(host);
+    await m.card.updateComplete;
+    const before = rows(m).length;
+    m.setState("person.alex", "not_home");
+    await until(() => rows(m).length > before);
+    await m.card.updateComplete;
+    expect(arrivesRow(m).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  /**
+   * Only "locked": the morning entry leaves one lock change, 17 s after the entrance review.
+   * Returns the card and the id of that change's own row, linked to while the camera is held.
+   */
+  const linkLoneLock = async () => {
+    const m = await mount({
+      hold: ["frigate", "llmvision"],
+      config: {
+        entities: [
+          { entity: "lock.front_door", only_states: ["locked"], camera: "camera.entrance" },
+          "person.alex",
+        ],
+      },
+    });
+    const review = must(
+      m.data.reviews.find((r) => r.data?.metadata?.title === "Person leaves with a backpack"),
+    );
+    const end = review.end_time ?? review.start_time;
+    // The lock change between the review's end and the grouping window (120 s) after it.
+    const isLock = (r: HTMLElement) => {
+      const [kind, entity, when] = (r.dataset.id ?? "").split(":");
+      const t = Number(when);
+      return kind === "entity" && entity === "lock.front_door" && t > end && t < end + 120;
+    };
+    await until(() => rows(m).some(isLock));
+    expect(rows(m).filter(isLock)).toHaveLength(1);
+    const id = must(rows(m).find(isLock)).dataset.id ?? "";
+    history.replaceState(null, "", `?reel=${encodeURIComponent(id)}`);
+    window.dispatchEvent(new Event("location-changed"));
+    const own = () => rows(m).find((r) => r.dataset.id === id);
+    await until(() => own()?.getAttribute("aria-expanded") === "true");
+    return { m, id, own };
+  };
+  const leavesRow = (m: Mounted) =>
+    rows(m).find((r) => r.textContent.includes("Person leaves with a backpack"));
+
+  test("a link to a lone change follows it onto the camera row and points at it", async () => {
+    try {
+      const { m, id } = await linkLoneLock();
+      m.release("frigate");
+      m.release("llmvision");
+      await until(() => !rows(m).some((r) => r.dataset.id === id));
+      await until(() => leavesRow(m)?.getAttribute("aria-expanded") === "true");
+      await until(() => !!root(m).querySelector(".step.highlight"));
+      expect(root(m).querySelectorAll(".step.highlight")).toHaveLength(1);
+
+      // Closing it sticks through a live change that rebuilds the list.
+      await userEvent.click(must(leavesRow(m)));
+      await m.card.updateComplete;
+      const before = rows(m).length;
+      m.setState("person.alex", "not_home");
+      await until(() => rows(m).length > before);
+      await m.card.updateComplete;
+      expect(leavesRow(m)?.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      history.replaceState(null, "", location.pathname);
+    }
+  });
+
+  test("a linked change the user closed doesn't open its camera row when it loads", async () => {
+    try {
+      const { m, own } = await linkLoneLock();
+      await userEvent.click(must(own()));
+      await m.card.updateComplete;
+      expect(own()?.getAttribute("aria-expanded")).toBe("false");
+
+      m.release("frigate");
+      m.release("llmvision");
+      await until(() => !!leavesRow(m));
+      await sleep(300);
+      expect(leavesRow(m)?.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      history.replaceState(null, "", location.pathname);
+    }
+  });
+
+  test("a linked change closed with Escape doesn't open its camera row when it loads", async () => {
+    try {
+      const { m, own } = await linkLoneLock();
+      must(own()).focus();
+      await userEvent.keyboard("{Escape}");
+      await m.card.updateComplete;
+      expect(own()?.getAttribute("aria-expanded")).toBe("false");
+
+      m.release("frigate");
+      m.release("llmvision");
+      await until(() => !!leavesRow(m));
+      await sleep(300);
+      expect(leavesRow(m)?.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      history.replaceState(null, "", location.pathname);
+    }
+  });
+
+  test("an open burst moving onto a camera row leaves the open detail alone", async () => {
+    const m = await mount({ hold: ["frigate", "llmvision"] });
+    await userEvent.click(await entryBurst(m));
+    // Then the user opens another row: Alex coming home.
+    const alex = () => rows(m).find((r) => (r.dataset.id ?? "").startsWith("entity:person.alex:"));
+    await userEvent.click(must(alex()));
+    await m.card.updateComplete;
+    expect(alex()?.getAttribute("aria-expanded")).toBe("true");
+
+    m.release("frigate");
+    m.release("llmvision");
+    await until(() => rows(m).some((r) => r.textContent.includes("Person arrives home")));
+    await sleep(300);
+    expect(alex()?.getAttribute("aria-expanded")).toBe("true");
+    expect(arrivesRow(m).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("an open burst whose first change stays opens the row its other change joined", async () => {
+    // Window 25 s: the morning entry's unlock (30 s before the review) and open (24 s before)
+    // form a burst. When the review loads, the open joins it and the unlock stays on its own.
+    const m = await mount({ hold: ["frigate", "llmvision"], config: { grouping: { window: 25 } } });
+    const review = must(
+      m.data.reviews.find((r) => r.data?.metadata?.title === "Person leaves with a backpack"),
+    );
+    const morning = (r: HTMLElement) => {
+      const id = r.dataset.id ?? "";
+      const t = Number(id.split(":").pop());
+      return id.startsWith("burst:") && t < review.start_time && t > review.start_time - 60;
+    };
+    await until(() => rows(m).some(morning));
+    await userEvent.click(must(rows(m).find(morning)));
+    await m.card.updateComplete;
+    expect(root(m).querySelectorAll(".steps .step")).toHaveLength(2);
+
+    m.release("frigate");
+    m.release("llmvision");
+    const leaves = () =>
+      rows(m).find((r) => r.textContent.includes("Person leaves with a backpack"));
+    await until(() => leaves()?.getAttribute("aria-expanded") === "true");
+    expect(rows(m).some(morning)).toBe(false);
+  });
+
+  test("a link to a change follows it onto the entrance row when the camera answers late", async () => {
+    const m = await mount({ hold: ["frigate", "llmvision"] });
+    // A burst's id names its first change: the unlock.
+    const unlock = (await entryBurst(m)).dataset.id?.slice("burst:".length) ?? "";
+    try {
+      history.replaceState(null, "", `?reel=${encodeURIComponent(unlock)}`);
+      window.dispatchEvent(new Event("location-changed"));
+      await until(() => !!root(m).querySelector(".step.highlight"));
+
+      m.release("frigate");
+      m.release("llmvision");
+      await until(() => rows(m).some((r) => r.textContent.includes("Person arrives home")));
+      await until(() => arrivesRow(m).getAttribute("aria-expanded") === "true");
+      const step = must(root(m).querySelector<HTMLElement>(".step.highlight"), "linked step");
+      expect(step.textContent).toContain("Unlocked");
+
+      // Closing the row sticks: a live change rebuilds the list, and the row stays closed.
+      await userEvent.click(arrivesRow(m));
+      await m.card.updateComplete;
+      const before = rows(m).length;
+      m.setState("person.alex", "not_home");
+      await until(() => rows(m).length > before);
+      await m.card.updateComplete;
+      expect(arrivesRow(m).getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      history.replaceState(null, "", location.pathname);
+    }
+  });
+});

@@ -64,6 +64,11 @@ export type ReelEvent = {
   camera?: string;
   /** Display name for a camera that could not be mapped to an HA camera entity. */
   cameraLabel?: string;
+  /**
+   * For an entity event: the camera key its entity is configured next to (`camera:`), so
+   * the change can join that camera's row. Not `camera`, which means the event has media.
+   */
+  nearCamera?: string;
   /** Stills, in fallback order. */
   thumbnail?: MediaRef[];
   /** Animated previews (mp4/gif), in fallback order. */

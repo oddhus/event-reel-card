@@ -186,3 +186,131 @@ describe("groupTimeline review fixes", () => {
     expect(items.map((i) => i.kind)).toEqual(["burst"]);
   });
 });
+
+describe("changes attached to a camera row (PLAN §5.3)", () => {
+  const near = (e: ReelEvent, camera = "camera.entrance") => ({ ...e, nearCamera: camera });
+  const entry = (t: number, camera = "camera.entrance") => [
+    near(lock(t, "Unlocked"), camera),
+    near(door(t + 6, "Open"), camera),
+    near(door(t + 40, "Closed"), camera),
+    near(lock(t + 100, "Locked"), camera),
+  ];
+
+  it("folds an entry burst into the overlapping review of its camera", () => {
+    const review = cam(1000, 1035);
+    const items = groupTimeline([review, ...entry(1010)], { window: 120 });
+    expect(items).toHaveLength(1);
+    const [row] = items;
+    expect(row.kind).toBe("event");
+    if (row.kind !== "event") return;
+    expect(row.event).toBe(review);
+    expect(row.attached?.events.map((e) => e.stateLabel)).toEqual([
+      "Unlocked",
+      "Open",
+      "Closed",
+      "Locked",
+    ]);
+    expect(labels(row.attached ?? { segments: [] })).toEqual([
+      "Front door: Unlocked · Open · Closed · Locked",
+    ]);
+  });
+
+  it("attaches a single change too, when it lies within the window of the review", () => {
+    // The review ends at 1035; the unlock comes 100 s later.
+    const items = groupTimeline([cam(1000, 1035), near(lock(1135, "Unlocked"))], {
+      window: 120,
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].attached?.events).toHaveLength(1);
+  });
+
+  it("keeps the burst apart when the review is further away than the window", () => {
+    // 200 s between the end of the review and the first change.
+    const items = groupTimeline([cam(1000, 1035), ...entry(1235)], { window: 120 });
+    expect(items.map((i) => i.kind).sort()).toEqual(["burst", "event"]);
+    expect(items.every((i) => !i.attached)).toBe(true);
+  });
+
+  it("never attaches to another camera's row", () => {
+    const items = groupTimeline([cam(1000, 1035, "camera.garage"), ...entry(1010)], {
+      window: 120,
+    });
+    expect(items.map((i) => i.kind).sort()).toEqual(["burst", "event"]);
+    expect(items.every((i) => !i.attached)).toBe(true);
+  });
+
+  it("picks the nearer of two reviews of the camera when both are in reach", () => {
+    // Two reviews 190 s apart, so they stay two rows with a window of 120 s. A change at
+    // 1090 is 80 s after the first and 110 s before the second: the first takes it. One at
+    // 1120 is 110 s after the first and 80 s before the second: the second takes it.
+    const host = (t: number) => {
+      const first = cam(1000, 1010);
+      const second = cam(1200, 1210);
+      const items = groupTimeline([first, second, near(lock(t, "Unlocked"))], { window: 120 });
+      expect(items).toHaveLength(2);
+      const found = items.find((i) => i.attached);
+      return found?.kind === "event" ? found.event : undefined;
+    };
+    expect(host(1090)?.start).toBe(1000);
+    expect(host(1120)?.start).toBe(1200);
+  });
+
+  it("doesn't let a door without a camera pull a door off its camera's row", () => {
+    // The basement door has no camera configured and changes 10 s after the front door:
+    // the front door still joins the review, and the basement door keeps a row of its own.
+    const front = near(lock(1010, "Unlocked"));
+    const basement = door(1020, "Open", "Basement door");
+    const items = groupTimeline([cam(1000, 1035), front, basement], { window: 120 });
+    expect(items).toHaveLength(2);
+    const host = items.find((i) => i.attached);
+    expect(host?.attached?.events).toEqual([front]);
+    expect(items.find((i) => !i.attached)).toMatchObject({ kind: "event", event: basement });
+  });
+
+  it("joins only the changes of a long run that are near a review", () => {
+    // A review 1000–1030, then a change every 100 s from 1120 to 1720: one run with a window
+    // of 120 s. Only the first (90 s after the review) is near it; the rest burst on their own.
+    const run = [1120, 1220, 1320, 1420, 1520, 1620, 1720].map((t, i) =>
+      near(door(t, i % 2 ? "Closed" : "Open")),
+    );
+    const items = groupTimeline([cam(1000, 1030), ...run], { window: 120 });
+    const host = items.find((i) => i.attached);
+    expect(host?.attached?.events).toEqual([run[0]]);
+    const rest = items.find((i) => i.kind === "burst");
+    expect(rest?.kind === "burst" && rest.events).toEqual(run.slice(1));
+    // The burst sorts by its own latest change, at the top, not under the 1000 review.
+    expect(items[0]).toBe(rest);
+  });
+
+  it("counts a review still running as lasting until now", () => {
+    // The review started at 1000 and has no end yet; the door opens at 1180, 180 s in.
+    const running = ev({
+      provider: "frigate",
+      start: 1000,
+      camera: "camera.entrance",
+      category: "person",
+      frigate: { instance: "frigate", camera: "entrance", reviewId: "r" },
+    });
+    const opened = near(door(1180, "Open"));
+    const joined = groupTimeline([running, opened], { window: 120, now: 1200 });
+    expect(joined).toHaveLength(1);
+    expect(joined[0].attached?.events).toEqual([opened]);
+    // Without a clock it counts from its start, 180 s away: no join.
+    expect(groupTimeline([running, opened], { window: 120 })).toHaveLength(2);
+  });
+
+  it("attaches to a camera group as a whole", () => {
+    const items = groupTimeline([cam(1000, 1030), cam(1100, 1130), ...entry(1050)], {
+      window: 120,
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].kind).toBe("camera");
+    expect(items[0].attached?.events).toHaveLength(4);
+  });
+
+  it("changes nothing for entities without a camera", () => {
+    const plain = [lock(1010, "Unlocked"), door(1016, "Open")];
+    const items = groupTimeline([cam(1000, 1035), ...plain], { window: 120 });
+    expect(items.map((i) => i.kind).sort()).toEqual(["burst", "event"]);
+  });
+});

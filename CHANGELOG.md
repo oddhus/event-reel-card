@@ -11,6 +11,10 @@ All notable changes to this project are documented here. The project uses
   "Nobody home" (with `presence` on) only the events while nobody was home. Like the band
   chips, they narrow a camera group to the matching events, and combine with the other
   chips.
+- `camera:` on a door or lock under `entities` puts its changes on that camera's row:
+  "Person arrives home" with "Front door: Unlocked · Open · Closed · Locked" under it,
+  instead of two rows. Opening the row lists each change and who made it. Off unless set;
+  see the README's "Doors next to a camera".
 
 ### Changed
 

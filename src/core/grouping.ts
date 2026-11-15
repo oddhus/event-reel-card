@@ -17,12 +17,28 @@ export type BurstSegment = {
   steps: BurstStep[];
 };
 
+/** Door, lock or other changes shown on a camera's row (entities with `camera:`, §5.3). */
+export type Attachment = {
+  /** Oldest first. */
+  events: ReelEvent[];
+  segments: BurstSegment[];
+  /** For each event, the id of the row's own event it joined (the nearest one). */
+  anchors: string[];
+};
+
+/** An attachment of `events` (oldest first), each joined to the event in `anchors`. */
+export function attachment(events: ReelEvent[], anchors: string[], bounceWindow = 10): Attachment {
+  return { events, anchors, segments: buildSegments(events, bounceWindow) };
+}
+
 type ItemBase = {
   id: string;
   /** Latest start among the item's events; the list is sorted by this, newest first. */
   sortTime: number;
   start: number;
   end: number;
+  /** On a camera row (an event with media or a camera group): the changes attached to it. */
+  attached?: Attachment;
 };
 
 export type TimelineItem =
@@ -35,6 +51,8 @@ export type GroupingOptions = {
   window: number;
   /** Seconds within which flips of the same entity collapse into one step. */
   bounceWindow?: number;
+  /** Now, in epoch seconds: a review still running lasts until then. */
+  now?: number;
 };
 
 const BURST_EXCLUDED = new Set(["presence", "calendar"]);
@@ -155,8 +173,10 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
     }
   };
 
-  // Bursts of state changes (doors, locks, …).
-  pushBursts(ascending.filter(isBurstable));
+  // Bursts of state changes (doors, locks, …). Changes of an entity next to a camera
+  // (`camera:`) are chained per camera below, so another door can't pull them off its row.
+  const burstable = ascending.filter(isBurstable);
+  pushBursts(burstable.filter((e) => !e.nearCamera));
 
   // Presence flapping groups per person, never across people.
   const presence = new Map<string, ReelEvent[]>();
@@ -193,10 +213,80 @@ export function groupTimeline(events: ReelEvent[], opts: GroupingOptions): Timel
     }
   }
 
+  // Changes next to a camera join that camera's rows; the rest burst per camera.
+  const joined = attachNear(items, burstable, opts, bounceWindow);
+  for (const list of joined.leftover.values()) pushBursts(list);
+
   // Everything else stays a row of its own.
   for (const e of ascending) {
     if (!mediaKey(e) && !isBurstable(e) && e.category !== "presence") items.push(eventItem(e));
   }
 
-  return items.sort((a, b) => b.sortTime - a.sortTime);
+  return items
+    .map((item) => joined.attached.get(item) ?? item)
+    .sort((a, b) => b.sortTime - a.sortTime);
+}
+
+/** Seconds from `t` to an event's span; a review still running lasts until `now`. */
+function gapTo(t: number, e: ReelEvent, now: number | undefined): number {
+  const end = e.end ?? (e.frigate && now !== undefined ? Math.max(now, e.start) : e.start);
+  return Math.max(0, e.start - t, t - end);
+}
+
+/**
+ * Joins each change of an entity next to a camera (`nearCamera`) to the row of that camera
+ * whose own event is nearest to it, within `window` seconds (0 inside a review). Each change
+ * goes on its own, so a long run of changes joins only where it is near a review, and the
+ * changes near no row are returned per camera to burst on their own.
+ */
+function attachNear(
+  items: TimelineItem[],
+  burstable: ReelEvent[],
+  opts: GroupingOptions,
+  bounceWindow: number,
+): { attached: Map<TimelineItem, TimelineItem>; leftover: Map<string, ReelEvent[]> } {
+  const hosts = new Map<string, { item: TimelineItem; event: ReelEvent }[]>();
+  for (const item of items) {
+    const own = item.kind === "event" ? [item.event] : item.kind === "camera" ? item.events : [];
+    for (const event of own) {
+      const key = mediaKey(event);
+      if (!key) continue;
+      const list = hosts.get(key) ?? [];
+      list.push({ item, event });
+      hosts.set(key, list);
+    }
+  }
+
+  const joined = new Map<TimelineItem, { events: ReelEvent[]; anchors: string[] }>();
+  const leftover = new Map<string, ReelEvent[]>();
+  for (const e of burstable) {
+    const camera = e.nearCamera;
+    if (!camera) continue;
+    let best: { item: TimelineItem; event: ReelEvent } | undefined;
+    let bestGap = Infinity;
+    for (const host of hosts.get(camera) ?? []) {
+      const gap = gapTo(e.start, host.event, opts.now);
+      if (gap <= opts.window && gap < bestGap) {
+        best = host;
+        bestGap = gap;
+      }
+    }
+    if (best) {
+      const entry = joined.get(best.item) ?? { events: [], anchors: [] };
+      entry.events.push(e);
+      entry.anchors.push(best.event.id);
+      joined.set(best.item, entry);
+    } else {
+      leftover.set(camera, [...(leftover.get(camera) ?? []), e]);
+    }
+  }
+
+  const attached = new Map<TimelineItem, TimelineItem>();
+  for (const [item, entry] of joined) {
+    attached.set(item, {
+      ...item,
+      attached: attachment(entry.events, entry.anchors, bounceWindow),
+    });
+  }
+  return { attached, leftover };
 }

@@ -1,8 +1,8 @@
 // Summary counts and filtering for timeline items (PLAN.md §5.1). Pure.
 
 import type { Category, ReelEvent } from "../types";
-import { eventItem, latest, mediaKey, span } from "./grouping";
-import type { TimelineItem } from "./grouping";
+import { attachment, eventItem, latest, mediaKey, span } from "./grouping";
+import type { Attachment, TimelineItem } from "./grouping";
 
 /** Display order of category chips. */
 export const CATEGORY_ORDER: Category[] = [
@@ -55,9 +55,19 @@ export function cameraKey(e: ReelEvent): string | undefined {
   return key && !key.startsWith("media:") ? key : undefined;
 }
 
+/** The row's own events: for a camera row, its media events, not the changes attached to it. */
 export function itemEvents(item: TimelineItem): ReelEvent[] {
   return item.kind === "event" ? [item.event] : item.events;
 }
+
+/** The door, lock or other changes attached to a camera row (§5.3); empty for other rows. */
+export const attachedEvents = (item: TimelineItem): ReelEvent[] => item.attached?.events ?? [];
+
+/** Every event a row shows: its own and the attached ones. */
+export const allItemEvents = (item: TimelineItem): ReelEvent[] => [
+  ...itemEvents(item),
+  ...attachedEvents(item),
+];
 
 /** The category an item is counted under: its newest event's. */
 export function primaryCategory(item: TimelineItem): Category {
@@ -65,8 +75,9 @@ export function primaryCategory(item: TimelineItem): Category {
   return events[events.length - 1].category;
 }
 
+/** The categories a row matches, the attached changes' included (Doors finds the camera row). */
 export function itemCategories(item: TimelineItem): Set<Category> {
-  return new Set(itemEvents(item).map((e) => e.category));
+  return new Set(allItemEvents(item).map((e) => e.category));
 }
 
 export function itemCameras(item: TimelineItem): Set<string> {
@@ -159,13 +170,13 @@ export function capList<T>(
   };
 }
 
-/** Timeline items up to `max` events; a group counts all its events. */
+/** Timeline items up to `max` events; a group counts all its events, the attached ones too. */
 export function capItems(
   items: TimelineItem[],
   max: number,
   keep?: (item: TimelineItem) => boolean,
 ): Capped<TimelineItem> {
-  return capList(items, max, (item) => itemEvents(item).length, keep);
+  return capList(items, max, (item) => allItemEvents(item).length, keep);
 }
 
 /**
@@ -183,13 +194,38 @@ export function narrowItems(items: TimelineItem[], hit: (e: ReelEvent) => boolea
     } else {
       const events = item.events.filter(hit);
       if (events.length === item.events.length) out.push(item);
-      else if (events.length === 1) out.push(eventItem(events[0]));
-      else if (events.length) {
-        out.push({ ...item, events, sortTime: latest(events), ...span(events) });
+      // A narrowed group keeps the attached changes that joined one of its remaining events.
+      else if (events.length === 1) {
+        out.push({ ...eventItem(events[0]), attached: narrowAttachment(item.attached, events) });
+      } else if (events.length) {
+        out.push({
+          ...item,
+          events,
+          sortTime: latest(events),
+          ...span(events),
+          attached: narrowAttachment(item.attached, events),
+        });
       }
     }
   }
   return out.sort((a, b) => b.sortTime - a.sortTime);
+}
+
+/** The attached changes that joined one of `events`; undefined when none did. */
+function narrowAttachment(
+  attached: Attachment | undefined,
+  events: ReelEvent[],
+): Attachment | undefined {
+  if (!attached) return undefined;
+  const ids = new Set(events.map((e) => e.id));
+  const keep = attached.events.flatMap((e, i) =>
+    ids.has(attached.anchors[i]) ? [{ e, anchor: attached.anchors[i] }] : [],
+  );
+  if (!keep.length) return undefined;
+  return attachment(
+    keep.map((k) => k.e),
+    keep.map((k) => k.anchor),
+  );
 }
 
 /**
@@ -214,7 +250,18 @@ export function applyFilters(
   });
   if (!hit) return kept;
   const cats = state.categories;
-  return narrowItems(kept, (e) => hit(e) && (!cats.size || cats.has(e.category)));
+  // A camera row that a category chip keeps for its attached changes (Doors) narrows by the
+  // per-event chips alone; otherwise the same event must pass them and be in a picked
+  // category.
+  const byAttachment = new Set(
+    kept.filter((item) => attachedEvents(item).some((e) => cats.has(e.category))),
+  );
+  const out: TimelineItem[] = [];
+  for (const item of kept) {
+    const catOk = (e: ReelEvent) => !cats.size || byAttachment.has(item) || cats.has(e.category);
+    out.push(...narrowItems([item], (e) => hit(e) && catOk(e)));
+  }
+  return out.sort((a, b) => b.sortTime - a.sortTime);
 }
 
 /**

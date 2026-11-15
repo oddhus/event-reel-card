@@ -10,6 +10,8 @@ export type EntityConfig = {
   states?: Record<string, string>;
   only_states?: string[];
   actor_attribute?: string;
+  /** The camera that watches this door or lock: its changes join that camera's rows (§5.3). */
+  camera?: string;
 };
 
 /** A provider is "explicit" when the user configured it; only explicit providers warn when missing. */
@@ -160,9 +162,12 @@ export function normalizeConfig(config: CardConfig): NormalizedConfig {
   }
   for (const item of config.entities ?? []) {
     if (typeof item === "string") entities.push({ entity: item });
-    else if (item && typeof item === "object" && typeof item.entity === "string")
+    else if (item && typeof item === "object" && typeof item.entity === "string") {
+      if (item.camera !== undefined && typeof item.camera !== "string") {
+        throw new Error(`\`camera\` of ${item.entity} must be a camera entity id`);
+      }
       entities.push(item);
-    else throw new Error("Each item under `entities` needs an entity id");
+    } else throw new Error("Each item under `entities` needs an entity id");
   }
 
   const context = normalizeContext(config.context);

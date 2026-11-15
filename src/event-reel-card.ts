@@ -7,7 +7,7 @@ import { detectCapabilities, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
 import { findEvent, parseReelParam } from "./core/deeplink";
 import { scrollEdges } from "./core/overflow";
-import { allOf, isUnreviewed, itemEvents, visibleRows } from "./core/filters";
+import { allItemEvents, allOf, attachedEvents, isUnreviewed, visibleRows } from "./core/filters";
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
 import type { TimelineItem } from "./core/grouping";
@@ -197,8 +197,10 @@ export class EventReelCard extends LitElement {
   private _stickyObserver?: ResizeObserver;
   /** The chip bar whose scroll edges are tracked, and what tracks them. */
   private _chipbar?: { el: HTMLElement; observer: ResizeObserver; onScroll: () => void };
-  /** A burst member opened by a deep link, highlighted inside the expanded burst. */
+  /** A burst member or attached change opened by a deep link, highlighted as a step. */
   private _linkedEvent?: string;
+  /** The linked change has been shown on its camera row once, so closing that row sticks. */
+  private _linkedFollowed = false;
   /**
    * The last row opened or linked to. The list reaches it past `max_events`, so it doesn't
    * vanish when it closes or newer events push it down; a day switch clears it.
@@ -726,6 +728,7 @@ export class EventReelCard extends LitElement {
     this._highlight = undefined;
     this._stripCursor = undefined;
     this._linkedEvent = undefined;
+    this._linkedFollowed = false;
     this._reach = undefined;
     this._lastEarlier = undefined;
     this._hadItems = false;
@@ -788,7 +791,7 @@ export class EventReelCard extends LitElement {
         .filter((e) => (e.end ?? e.start) >= start && e.start < end)
         .sort((a, b) => b.start - a.start),
     );
-    const items = groupTimeline(visible, { window: cfg.groupingWindow });
+    const items = groupTimeline(visible, { window: cfg.groupingWindow, now: clock.now() });
     this._keepOpen(visible, items);
     this._items = items;
     this._resolveDeepLink();
@@ -874,7 +877,7 @@ export class EventReelCard extends LitElement {
   private _resolveDeepLink(final = false) {
     const id = this._pendingLink;
     if (!id || !this._loaded) return;
-    const target = findEvent(this._items.flatMap(itemEvents), id);
+    const target = findEvent(this._items.flatMap(allItemEvents), id);
     if (!target) {
       if (final) {
         this._pendingLink = undefined;
@@ -888,6 +891,19 @@ export class EventReelCard extends LitElement {
     this._clearLinkFromUrl();
     this._filter = { categories: new Set() };
     this._reach = target.id;
+    // A new link replaces the previous one, which must not pull the view any more.
+    this._linkedEvent = undefined;
+    this._linkedFollowed = false;
+    // A change attached to a camera row: open that row (a group expands) and point at the step.
+    const host = this._items.find((i) => attachedEvents(i).includes(target));
+    if (host) {
+      this._linkedEvent = target.id;
+      this._linkedFollowed = true;
+      if (host.kind === "event") this._openId = host.event.id;
+      else this._openGroups = new Set([...this._openGroups, host.id]);
+      void this._scrollTo(host.id, "smooth");
+      return;
+    }
     const container = this._items.find((i) => i.kind !== "event" && i.events.includes(target));
     if (container?.kind === "burst") {
       // Bursts have no detail; expand the burst and point at the step.
@@ -897,6 +913,8 @@ export class EventReelCard extends LitElement {
       return;
     }
     this._openId = target.id;
+    // A lone change that may still move onto its camera row when the camera loads.
+    if (target.nearCamera) this._linkedEvent = target.id;
     if (container) this._openGroups = new Set([...this._openGroups, container.id]);
     void this._scrollTo(target.id, "smooth");
   }
@@ -920,6 +938,7 @@ export class EventReelCard extends LitElement {
 
   /** Keeps an open detail open when its event merged into another or joined a camera group. */
   private _keepOpen(events: ReelEvent[], items: TimelineItem[]) {
+    this._followAttached(items);
     const id = this._openId;
     if (!id) return;
     const target = events.find((e) => e.id === id) ?? events.find((e) => e.aliases?.includes(id));
@@ -928,6 +947,76 @@ export class EventReelCard extends LitElement {
     const group = items.find((i) => i.kind === "camera" && i.events.includes(target));
     if (group && !this._openGroups.has(group.id)) {
       this._openGroups = new Set([...this._openGroups, group.id]);
+    }
+  }
+
+  /**
+   * A change that was open, in an open burst, or linked to can move onto a camera row when
+   * that camera's review loads later (§5.3). Open the row it moved to instead, and show the
+   * linked step there.
+   */
+  private _followAttached(items: TimelineItem[]) {
+    const hostOf = (id: string) =>
+      items.find((i) => attachedEvents(i).some((e) => e.id === id || !!e.aliases?.includes(id)));
+    // A burst's row may take the one open detail only when none is open and the filter shows
+    // it: a refresh must not close the clip being watched, or open a row the filter hides.
+    const shown = (host: TimelineItem) =>
+      this._visible(this._filter, items).list.some((i) => i.id === host.id);
+    const open = (host: TimelineItem, takeDetail = true) => {
+      if (host.kind === "event") {
+        if (!takeDetail && (this._openId !== undefined || !shown(host))) return false;
+        const already = this._openId === host.event.id;
+        this._openId = host.event.id;
+        return !already;
+      }
+      if (this._openGroups.has(host.id)) return false;
+      if (!takeDetail && !shown(host)) return false;
+      this._openGroups = new Set([...this._openGroups, host.id]);
+      return true;
+    };
+    // An open row that was a single change.
+    const openId = this._openId;
+    const openHost = openId ? hostOf(openId) : undefined;
+    if (openHost) {
+      open(openHost);
+      // The change has no row of its own any more: follow it once, so closing the group sticks,
+      // and keep it reached, so `max_events` keeps its new row.
+      if (openHost.kind !== "event") {
+        this._openId = undefined;
+        this._reach = openId;
+      }
+    }
+    // An open burst some of whose changes moved onto camera rows: open those rows, and keep
+    // open what is left of the burst, whose id changes when its first change moved. The
+    // previous list has the burst's changes, so a row closed after the move stays closed.
+    for (const id of this._openGroups) {
+      if (!id.startsWith("burst:")) continue;
+      const old = this._items.find((i) => i.id === id);
+      if (old?.kind !== "burst") continue;
+      const moved = old.events.filter((e) => hostOf(e.id));
+      if (!moved.length) continue;
+      const groups = new Set(this._openGroups);
+      if (!items.some((i) => i.id === id)) groups.delete(id);
+      for (const e of old.events) {
+        const rest = items.find((i) => i.kind === "burst" && i.events.some((x) => x.id === e.id));
+        if (rest) groups.add(rest.id);
+      }
+      this._openGroups = groups;
+      for (const e of moved) {
+        const host = hostOf(e.id);
+        if (host) open(host, false);
+      }
+      // Keep the row listed under `max_events`, unless something else is already reached.
+      this._reach ??= moved[0].id;
+    }
+    // A deep-linked step: open its row and bring it into view the first time it is on one.
+    // After that, closing the row sticks, even when the row's id changes.
+    const linked = this._linkedEvent;
+    const linkedHost = linked && !this._linkedFollowed ? hostOf(linked) : undefined;
+    if (linkedHost) {
+      this._linkedFollowed = true;
+      open(linkedHost);
+      void this._scrollTo(linkedHost.id, "smooth");
     }
   }
 
@@ -1044,14 +1133,25 @@ export class EventReelCard extends LitElement {
   }
 
   private _toggle(id: string) {
+    // The user chose what to look at: a pending deep link no longer moves the view.
+    this._linkedFollowed = true;
     this._openId = this._openId === id ? undefined : id;
     if (this._openId) this._reach = id;
   }
 
   private _toggleGroup(id: string) {
+    this._linkedFollowed = true;
     const next = new Set(this._openGroups);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+      // Closing a group closes the detail open inside it, which would otherwise open the
+      // group again on the next refresh.
+      const group = this._items.find((i) => i.id === id);
+      const open = this._openId;
+      if (open && group?.kind === "camera" && group.events.some((e) => e.id === open)) {
+        this._openId = undefined;
+      }
+    } else next.add(id);
     this._openGroups = next;
   }
 
@@ -1074,6 +1174,7 @@ export class EventReelCard extends LitElement {
     } else if (ev.key === "Escape" && this._openId) {
       const id = this._openId;
       this._openId = undefined;
+      this._linkedFollowed = true;
       void this.updateComplete.then(() =>
         this.renderRoot
           .querySelector<HTMLElement>(`button.row[data-id="${CSS.escape(id)}"]`)
@@ -1202,7 +1303,7 @@ export class EventReelCard extends LitElement {
   }
 
   /** The rows the list shows for a filter: filtered, then capped (§5.1). */
-  private _visible(filter = this._filter) {
+  private _visible(filter = this._filter, items = this._items) {
     // A picked band the config no longer has is ignored, so it can't hide every row.
     const picked = this._bands.filter((b) => filter.bands?.has(b.key));
     const presence = this._presence;
@@ -1214,10 +1315,10 @@ export class EventReelCard extends LitElement {
       filter.nobodyHome && presence ? (e) => whileNobodyHome(presence, e) : undefined,
     );
     return visibleRows(
-      this._items,
+      items,
       filter,
       this._config!.maxEvents,
-      (item) => itemEvents(item).some((e) => this._isReached(e)),
+      (item) => allItemEvents(item).some((e) => this._isReached(e)),
       hit,
     );
   }
@@ -1227,11 +1328,12 @@ export class EventReelCard extends LitElement {
    * closed, so it doesn't open again (with its media) when the filter is switched off.
    */
   private _setFilter(next: FilterState) {
+    this._linkedFollowed = true;
     this._filter = next;
     const open = this._openId;
     if (!open) return;
     const listed = this._visible(next).list.some((item) =>
-      itemEvents(item).some((e) => e.id === open || !!e.aliases?.includes(open)),
+      allItemEvents(item).some((e) => e.id === open || !!e.aliases?.includes(open)),
     );
     if (!listed) this._openId = undefined;
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { normalizeConfig } from "../src/config";
+import type { EntityConfig } from "../src/config";
 import { buildCameraRegistry } from "../src/core/cameras";
 import { getLocalize } from "../src/i18n";
 import {
@@ -1000,5 +1001,56 @@ describe("Frigate fetch", () => {
     expect(events.map((e) => [e.id, e.title])).toEqual([
       ["frigate:frigate:a", "Activity at Entrance"],
     ]);
+  });
+});
+
+describe("Entity fetch with camera: (PLAN §5.3)", () => {
+  const range = { start: iso("2026-10-08T00:00:00+02:00"), end: iso("2026-10-09T00:00:00+02:00") };
+  const when = iso("2026-10-08T14:16:26+02:00");
+  const registry = buildCameraRegistry({
+    states: {
+      "camera.entrance": state("camera.entrance", {
+        friendly_name: "Entrance",
+        client_id: "frigate",
+        camera_name: "entrance",
+      }),
+    },
+    entities: {},
+    aliases: { "camera.porch_reolink": "camera.entrance" },
+  });
+  const fetchWith = (entities: EntityConfig[]) =>
+    createEntityProvider(new ActorResolver()).fetch(range, {
+      hass: {
+        config: { time_zone: "Europe/Oslo" },
+        states: {},
+        callWS: async (msg: Record<string, unknown>) =>
+          msg.type === "logbook/get_events"
+            ? entities.map((c, i) => ({ when: when + i, entity_id: c.entity, state: "on" }))
+            : {},
+      } as never,
+      config: normalizeConfig({ type: "x", entities }),
+      cameras: registry,
+      localize: getLocalize("en"),
+      now: iso("2026-10-08T15:00:00+02:00"),
+    });
+
+  it("names the camera, through camera_aliases, and nothing for entities without one", async () => {
+    const events = await fetchWith([
+      { entity: "binary_sensor.front_door", camera: "camera.entrance" },
+      { entity: "binary_sensor.porch_door", camera: "camera.porch_reolink" },
+      { entity: "binary_sensor.basement_door" },
+    ]);
+    expect(events.map((e) => [e.entityId, e.nearCamera])).toEqual([
+      ["binary_sensor.front_door", "camera.entrance"],
+      ["binary_sensor.porch_door", "camera.entrance"],
+      ["binary_sensor.basement_door", undefined],
+    ]);
+    // A door change is never a camera row of its own.
+    expect(events.every((e) => e.camera === undefined)).toBe(true);
+  });
+
+  it("keeps an unknown camera as written, so it matches no row", async () => {
+    const [event] = await fetchWith([{ entity: "binary_sensor.shed", camera: "camera.shed" }]);
+    expect(event.nearCamera).toBe("camera.shed");
   });
 });

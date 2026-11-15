@@ -295,6 +295,26 @@ function helpersFor(hass: HomeAssistant): EntityHelpers {
   };
 }
 
+/**
+ * Sets `nearCamera` on the events of entities configured with `camera:`, mapped through
+ * `camera_aliases` like the other providers' cameras.
+ */
+function withNearCamera(
+  events: ReelEvent[],
+  configs: EntityConfig[],
+  ctx: ProviderContext,
+): ReelEvent[] {
+  const near = new Map<string, string>();
+  for (const c of configs) {
+    if (c.camera) near.set(c.entity, ctx.cameras.resolve(c.camera) ?? c.camera);
+  }
+  if (!near.size) return events;
+  return events.map((ev) => {
+    const camera = ev.entityId ? near.get(ev.entityId) : undefined;
+    return camera ? { ...ev, nearCamera: camera } : ev;
+  });
+}
+
 export function createEntityProvider(actors = new ActorResolver()): Provider {
   return {
     type: "entity",
@@ -309,7 +329,11 @@ export function createEntityProvider(actors = new ActorResolver()): Provider {
         end_time: iso(range.end),
         entity_ids: entityIds,
       });
-      const events = logbookToEvents(entries, configs, helpersFor(ctx.hass));
+      const events = withNearCamera(
+        logbookToEvents(entries, configs, helpersFor(ctx.hass)),
+        configs,
+        ctx,
+      );
 
       const attrs = new Map(configs.map((c) => [c.entity, c.actor_attribute]));
       await actors.fill(ctx.hass, events, (id) => attrs.get(id), ACTOR_WAIT);
@@ -336,7 +360,7 @@ export function createEntityProvider(actors = new ActorResolver()): Provider {
           actor: actorAttr ? String(actorAttr) : undefined,
         });
       }
-      return out;
+      return withNearCamera(out, ctx.config.entities, ctx);
     },
 
     // An actor lookup that answered after the rows were returned: fetch again to show it.

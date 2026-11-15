@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ContextBand } from "../src/core/context";
 import { inAnyBand } from "../src/core/context";
-import { allOf, applyFilters, countRows, isUnreviewed } from "../src/core/filters";
+import { allOf, applyFilters, countRows, isUnreviewed, visibleRows } from "../src/core/filters";
 import { groupTimeline } from "../src/core/grouping";
 import type { TimelineItem } from "../src/core/grouping";
 import type { Presence } from "../src/core/presence";
@@ -124,5 +124,64 @@ describe("per-event chips", () => {
     expect(isUnreviewed(ev({ start: T0, reviewed: false }))).toBe(false);
     expect(isUnreviewed(review("x", T0, false))).toBe(true);
     expect(isUnreviewed(review("y", T0, true))).toBe(false);
+  });
+});
+
+describe("changes attached to a camera row (PLAN §5.3)", () => {
+  // A camera group of two reviews (10:00 and 10:02) with the front door, configured next to
+  // the drive camera, opened and closed at 10:01–10:02; a lone review at 15:00.
+  const nearDrive = (e: ReelEvent) => ({ ...e, nearCamera: "camera.drive" });
+  const attachedItems = groupTimeline(
+    [
+      review("a1", at(10), false),
+      review("a2", at(10, 2), true),
+      nearDrive(door("ad1", at(10, 1), "Open")),
+      nearDrive(door("ad2", at(10, 2), "Closed")),
+      review("a3", at(15), false),
+    ],
+    { window: 120 },
+  );
+
+  it("folds the door into the camera group, leaving two rows", () => {
+    expect(attachedItems).toHaveLength(2);
+    const group = attachedItems.find((i) => i.kind === "camera");
+    expect(group?.attached?.events.map((e) => e.id)).toEqual(["ad1", "ad2"]);
+  });
+
+  it("finds the camera row with the Doors chip", () => {
+    const out = applyFilters(attachedItems, { categories: new Set(["door"]) });
+    expect(ids(out)).toEqual([["a1", "a2"]]);
+  });
+
+  it("counts attached changes against max_events", () => {
+    // Newest first: the lone review (1 event), then the group (2 reviews + 2 door changes =
+    // 4). A limit of 1 hides the whole group; a limit of 2 keeps it, since a group across the
+    // limit is kept whole.
+    expect(visibleRows(attachedItems, { categories: new Set() }, 1).hidden).toBe(4);
+    expect(visibleRows(attachedItems, { categories: new Set() }, 2).hidden).toBe(0);
+  });
+
+  it("keeps only the changes that joined a review the group still shows", () => {
+    // The open at 10:01 joined a1 (40 s after it ended; a2 starts 60 s later), the close at
+    // 10:02 joined a2 (it starts then). Unreviewed narrows the group to a1, which keeps the
+    // open only; a filter that keeps only a2 keeps the close.
+    const unreviewed = applyFilters(attachedItems, { categories: new Set() }, isUnreviewed);
+    const a1 = unreviewed.find((i) => i.kind === "event" && i.event.id === "a1");
+    expect(a1?.attached?.events.map((e) => e.id)).toEqual(["ad1"]);
+    expect(a1?.attached?.segments.map((x) => x.steps.map((st) => st.label))).toEqual([["Open"]]);
+    const reviewed = applyFilters(
+      attachedItems,
+      { categories: new Set() },
+      (e) => e.reviewed === true,
+    );
+    const a2 = reviewed.find((i) => i.kind === "event" && i.event.id === "a2");
+    expect(a2?.attached?.events.map((e) => e.id)).toEqual(["ad2"]);
+  });
+
+  it("keeps a camera row the Doors chip found when a per-event chip is picked too", () => {
+    // Doors + Unreviewed: the door changes aren't reviews, but the row is kept for them and
+    // narrows by Unreviewed alone, to a1 (with the open that joined it).
+    const out = applyFilters(attachedItems, { categories: new Set(["door"]) }, isUnreviewed);
+    expect(ids(out)).toEqual([["a1"]]);
   });
 });

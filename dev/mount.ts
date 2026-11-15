@@ -45,6 +45,8 @@ export type Mounted = {
   setHass(opts: { language?: string; dark?: boolean }): void;
   /** Lets a source in `hold` answer its requests, now and from then on. */
   release(source: string): void;
+  /** Changes an entity's state (a live change), keeping its attributes. */
+  setState(entityId: string, state: string): void;
   remove(): void;
 };
 
@@ -93,7 +95,7 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     last_updated: new Date(now * 1000).toISOString(),
   });
 
-  const states: Record<string, HassEntity> = {};
+  let states: Record<string, HassEntity> = {};
   const entities: Record<string, HassEntityRegistryEntry> = {};
 
   function frigateCamera(name: string, label = name.replace(/_/g, " ")) {
@@ -269,8 +271,13 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     title: "Today's events",
     density: "compact",
     entities: [
-      { entity: "lock.front_door", name: "Front door", actor_attribute: "changed_by" },
-      { entity: "binary_sensor.front_door", name: "Front door" },
+      {
+        entity: "lock.front_door",
+        name: "Front door",
+        actor_attribute: "changed_by",
+        camera: "camera.entrance",
+      },
+      { entity: "binary_sensor.front_door", name: "Front door", camera: "camera.entrance" },
       "person.alex",
     ],
     ...(withLlmVision ? { llmvision: { non_camera: false } } : {}),
@@ -312,6 +319,16 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     data,
     setHass,
     release: (source) => gates.get(source)?.(),
+    setState: (entityId, state) => {
+      // A new object, so the card sees the change against the previous hass.
+      const old = states[entityId] as HassEntity | undefined;
+      const at = new Date(clock.now() * 1000).toISOString();
+      states = {
+        ...states,
+        [entityId]: { ...st(entityId, state, old?.attributes), last_changed: at, last_updated: at },
+      };
+      setHass({});
+    },
     remove: () => stage.remove(),
   };
 }
