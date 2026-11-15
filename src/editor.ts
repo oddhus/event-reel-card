@@ -140,6 +140,7 @@ export class EventReelCardEditor extends LitElement {
           { name: "frigate_show_unmatched", selector: { boolean: {} } },
           { name: "frigate_alerts_only", selector: { boolean: {} } },
           { name: "nest_enabled", selector: { boolean: {} } },
+          { name: "nest_events", selector: { boolean: {} } },
         ],
       },
     ];

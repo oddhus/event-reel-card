@@ -25,11 +25,13 @@ export type ProviderStatus = "active" | "off" | "missing";
 
 /** "missing" is shown as a warning only for providers the user configured explicitly. */
 export function providerStatus(
-  type: "entity" | "llmvision" | "event_reel" | "frigate",
+  type: "entity" | "llmvision" | "event_reel" | "frigate" | "nest",
   config: NormalizedConfig,
   caps: Capabilities,
 ): ProviderStatus {
   if (type === "entity") return config.entities.length ? "active" : "off";
+  // Nest always supplies clips for AI events; as a source of rows it is opt-in.
+  if (type === "nest" && !config.nest.events) return "off";
   const toggle = config[type];
   if (!toggle.enabled) return "off";
   return caps[type] ? "active" : "missing";
@@ -37,7 +39,7 @@ export function providerStatus(
 
 /** Whether any provider can bring events; with none, the card shows how to set it up. */
 export function hasSource(config: NormalizedConfig, caps: Capabilities): boolean {
-  return (["entity", "llmvision", "event_reel", "frigate"] as const).some(
+  return (["entity", "llmvision", "event_reel", "frigate", "nest"] as const).some(
     (type) => providerStatus(type, config, caps) === "active",
   );
 }

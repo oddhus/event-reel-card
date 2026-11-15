@@ -75,6 +75,11 @@ export type ReelEvent = {
   preview?: MediaRef[];
   /** A fixed exact clip (Nest). Frigate clips are built from `frigate` when opened. */
   clip?: MediaRef;
+  /**
+   * The Nest event token AI text is about, whether or not its clip could be found, so it
+   * joins that Nest event's row (§3.5).
+   */
+  nestToken?: string;
   frigate?: FrigateRef;
   labels?: string[];
   people?: string[];

@@ -197,8 +197,39 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
 - The token is base64 of a JSON array. It equals LLM Vision's `camera_name` for video
   analyzer events on Nest attachments (§2.1).
 - Titles are `"<Type> @ <local timestamp>"` (Doorbell, Person, Motion…). Parsing time and
-  type from a localized title is fragile, so the full Nest provider is P2. M1 only uses
-  Nest to play clips for LLM Vision doorbell events joined by token.
+  type from a localized title is fragile, so event rows come from the event entities
+  instead (below). Without `nest.events`, Nest only plays clips for AI doorbell events
+  joined by token.
+- **Event entities (verified 2026-11-14 in HA core and on a live install).** Since HA 2024.9
+  (core PR #123042) each Nest camera has `event.<camera>_chime` (event type `ring`) and
+  `event.<camera>_motion` (`camera_motion`, `camera_person`, `camera_sound`), platform
+  `nest`, with the camera's `device_id`. Each trigger records `event_type` and
+  `nest_event_id`, which is the event token above (`nest_event.event_token` in core).
+  - `history/history_during_period` with attributes gives one row per trigger. The row's
+    **state is the event's own time** (ISO, ms). A restart writes the last trigger again
+    with the same state and a new `last_updated`, and the row at the start of the range
+    repeats an earlier trigger, so rows are kept by state time inside the range and by
+    token, never by `last_changed`. While the integration loads the state is
+    `unavailable` with `event_types` (plural) and no `event_type`.
+  - The token's first element is a session counter. Two rings 34 s apart shared one
+    session (`n:1`, `n:5`); a ring and the person seen a few minutes before it had
+    **different** sessions, so a visit is one session on one device, and a ring and the
+    person before it meet only in the camera's row group.
+  - In 10 days only `ring` and `camera_person` triggered (no motion or sound events).
+  - The provider also reads each entity's current state as a row, since the recorder
+    stores a trigger a few seconds after the state changes; the token dedupe makes it free
+    once history has it. AI text joins by a `nestToken` field (set by LLM Vision and Event
+    Reel even when no clip was found), and a Nest ring keeps the doorbell category.
+  - A row's id is `nest:<device>:<session>`, so it holds when the visit's first trigger
+    leaves the range; the tokens are its aliases, for deep links and the AI join.
+  - Checked live on 2026-11-15 with a dev build (config set only in the browser): a day
+    with three rings and two Nest person events gave five rows; the AI text for two rings
+    and a person joined their rows by token, rings kept the doorbell category, and no AI row
+    was left over. The tokens resolve through `media_source/resolve_media` to a signed
+    `/api/nest/event_media/...` URL, and a clip played (640×854, a 1 s preview clip on
+    that doorbell). Two of five clips answered 404 JSON: one ring, and every event of a
+    Nest camera whose media-source listing is empty (a camera without clips). The player
+    shows "unavailable" with Retry for those; the row and its text are still right.
 - The token lookup browses media source (the root, then one call per device). LLM Vision
   waits at most 3 s for it, so a slow browse never holds back the AI events: doorbell rows
   show without a clip, and when the browse answers, the provider's `subscribe` asks for a
@@ -341,7 +372,8 @@ src/
     llmvision.ts
     eventreel.ts            # Event Reel integration: AI descriptions
     frigate.ts
-    nest.ts                 # token → clip resolver only; full provider P2
+    nest.ts                 # token → device resolver for AI clips; Nest events as rows
+                            #   (opt-in) from the event entities' history
     calendar.ts             # P2: any calendar entity (not written yet)
   core/                     # no DOM; media.ts calls hass and capabilities.ts reads it
     capabilities.ts         # what is installed / which optional routes work (§3.8)
@@ -463,6 +495,12 @@ Unit test every rule.
 
 Goal: one row per real-world moment, with the AI title and description plus the video.
 
+0. **Nest event rows** (`nest.events`, §2.3) first take every AI text whose clip is one of
+   their Nest tokens, exactly, never by time, through the same many-to-one rule (3–4).
+   The rest goes on to step 1. Nest's own type wins over a doorbell guess (LLM Vision
+   calls every Nest clip a doorbell); a more specific AI category still names a person or
+   motion row. Known: texts that joined a Nest row don't count toward `hide_unconfirmed`
+   on a camera that also has Frigate, which errs toward showing the footage.
 1. Split events into **text events** (LLM Vision or Event Reel, with a camera) and
    **media events** (Frigate reviews). Text events that share a Nest clip (the same ring
    described by both AI producers) first collapse into one, with the later text in
@@ -540,7 +578,8 @@ configured differently.
 - **Tier 0, HA core APIs:** `hass.states`, `logbook/get_events`,
   `history/history_during_period`, `auth/sign_path`, `media_source/*`, the calendar API.
   The card must be useful with only these (entities, presence, calendars).
-- **Tier 1, core integrations:** Nest, reached only through media source.
+- **Tier 1, core integrations:** Nest, reached through media source and, for
+  `nest: { events: true }`, the history of its `event` entities (§2.3).
 - **Tier 2, custom integrations:** the Frigate integration, LLM Vision and the companion
   Event Reel integration. Optional providers. Event Reel's services stay registered after
   its entry is removed or fails to load; its list command then answers `not_loaded`,
@@ -897,7 +936,8 @@ to the clip.
 - No source at all (no entities, and no Frigate, Event Reel or LLM Vision that is installed
   and not switched off; `hasSource()` in `core/capabilities.ts`): "Nothing to show yet",
   what to add, and a link to the README's configuration section, instead of an empty range
-  that would look like a quiet day (2026-10-22). Nest alone brings no events. When
+  that would look like a quiet day (2026-10-22). Nest alone brings no events unless
+  `nest.events` is on. When
   `hass.entities` or `hass.services` changes, or the Frigate cameras in `hass.states` do
   (`frigateSignature`: Frigate is found by its cameras' `client_id`/`camera_name`, which
   arrive when it loads, while the entity registry may not change), the card detects again
@@ -966,7 +1006,7 @@ can already shade "away mode", but not say who, and a template can't read past s
 |---|---|
 | P0 (M1) | Entity provider, LLM Vision provider, Frigate reviews provider, many-to-one merge, doorbell clips by Nest token, compact rows, grouping (bursts, bounces, camera groups), animated previews with fallback chain, HLS player with codec fallback, rolling 24 h range, nb/en |
 | P1 | Mark reviewed (+ mark all), download, filter chips and summary, day strip, deep links, GUI editor and stub config, HACS release |
-| P2 | ~~Day navigation~~ (done), ~~context bands~~ (done), calendar provider, full Nest provider, ~~bursts attached to camera events~~ (done), time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search across days (a one-day version was built and dropped as too little gain over the chips; revisit when AI descriptions are reliable), ~~presence at event time~~ (done), "Summarize the day" (off by default) |
+| P2 | ~~Day navigation~~ (done), ~~context bands~~ (done), calendar provider, ~~Nest events as rows~~ (done), ~~bursts attached to camera events~~ (done), time-range previews and synthesized clips once the Frigate integration releases the preview route (with a recording-coverage check), faces/sub_labels chips and "unknown person only" filter, ~~GenAI threat badge~~ (done) and `scene` fallback, search across days (a one-day version was built and dropped as too little gain over the chips; revisit when AI descriptions are reliable), ~~presence at event time~~ (done), "Summarize the day" (off by default) |
 | P3 | Multi-camera sync, public provider API (`window.eventReel.registerProvider`), Reolink media-source provider, weekly heatmap |
 
 ---

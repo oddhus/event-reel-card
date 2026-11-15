@@ -820,3 +820,43 @@ describe("changes attached to a camera row (PLAN §5.3)", () => {
     }
   });
 });
+
+describe("Nest events as rows (PLAN §3.2)", () => {
+  test("a new card has them on with Nest and no Frigate", () => {
+    const Card = customElements.get("event-reel-card") as unknown as {
+      getStubConfig(hass: unknown): Record<string, unknown>;
+    };
+    const hass = (components: string[]) => ({ states: {}, config: { components } });
+    expect(Card.getStubConfig(hass(["nest"]))).toEqual({ nest: { events: true } });
+    expect(Card.getStubConfig(hass(["nest", "frigate"]))).toEqual({});
+    expect(Card.getStubConfig(hass([]))).toEqual({});
+  });
+
+  test("are off by default, and with `events: true` show the doorbell's own events", async () => {
+    const plain = await mount();
+    await until(() => ids(plain).some((id) => id.startsWith("frigate:")));
+    expect(ids(plain).some((id) => id.startsWith("nest:"))).toBe(false);
+    plain.remove();
+
+    const m = await mount({ config: { nest: { events: true } } });
+    // The afternoon person, seen only by Nest, gets a row of its own.
+    await until(() => rows(m).some((r) => r.textContent.includes("Person at Doorbell")));
+    // The ring the AI described is one row with the AI's title, under the ring's id.
+    const ring = must(
+      rows(m).find((r) => r.textContent.includes("Child rings the doorbell")),
+      "the described ring",
+    );
+    // With the person seen a minute before it (its own Nest session), it forms the
+    // doorbell's group; opened, the group lists the ring under the ring's own id.
+    expect(ring.dataset.id?.startsWith("cam:")).toBe(true);
+    expect(rows(m).filter((r) => r.textContent.includes("Child rings the doorbell"))).toHaveLength(
+      1,
+    );
+    expect(rows(m).some((r) => r.textContent.includes("The doorbell rang at"))).toBe(false);
+    await userEvent.click(ring);
+    // A row's id is the device and the Nest session, the token's first element.
+    const session = (JSON.parse(atob(m.data.nestToken)) as string[])[0];
+    const id = `nest:nest-device-1:${session}`;
+    await until(() => ids(m).includes(id));
+  });
+});

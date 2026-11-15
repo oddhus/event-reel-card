@@ -121,6 +121,12 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     device_id: "nest-device-1",
     platform: "nest",
   };
+  // The doorbell's Nest event entities; their rows show with `nest: { events: true }`.
+  for (const id of Object.keys(data.nestEvents)) {
+    entities[id] = { entity_id: id, device_id: "nest-device-1", platform: "nest" };
+    const last = data.nestEvents[id].at(-1);
+    states[id] = st(id, last?.s ?? "unknown", last?.a ?? {});
+  }
   states["camera.side_yard"] = st("camera.side_yard", "idle", { friendly_name: "Side yard" });
   states["lock.front_door"] = st("lock.front_door", "locked", {
     friendly_name: "Lock",
@@ -205,7 +211,11 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
         return t >= start && t <= end;
       });
     },
-    "history/history_during_period": () => data.history,
+    "history/history_during_period": (msg) => {
+      const all: Record<string, unknown> = { ...data.history, ...data.nestEvents };
+      const ids = Array.isArray(msg.entity_ids) ? (msg.entity_ids as string[]) : Object.keys(all);
+      return Object.fromEntries(ids.filter((id) => id in all).map((id) => [id, all[id]]));
+    },
     "frigate/reviews/viewed": (msg) => {
       const ids = new Set(msg.ids as string[]);
       for (const r of data.reviews) if (ids.has(r.id)) r.has_been_reviewed = true;

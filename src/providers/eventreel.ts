@@ -89,6 +89,7 @@ export function eventReelToEvents(raw: EventReelRecord[], ctx: EventReelMapConte
       cameraLabel: camera ? undefined : cameraName,
       thumbnail: thumbnail.length ? thumbnail : undefined,
       clip,
+      nestToken: e.nest?.event_token ?? undefined,
       labels: e.labels?.length ? [...e.labels] : undefined,
       raw: e,
     });

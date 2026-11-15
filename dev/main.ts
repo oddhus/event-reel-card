@@ -29,6 +29,7 @@ const config: Partial<CardConfig> = {
   ...(params.get("context") === "0" ? { context: undefined } : {}),
   ...(params.get("filters") === "0" ? { filters: false } : {}),
   ...(params.get("presence") === "0" ? { presence: undefined } : {}),
+  ...(params.get("nest") === "events" ? { nest: { events: true } } : {}),
 };
 
 const mounted = await mountCard({

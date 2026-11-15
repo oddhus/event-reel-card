@@ -10,7 +10,8 @@ A Home Assistant dashboard card that shows **one compact timeline of the day's e
   [Event Reel integration](https://github.com/oddhus/event-reel) or
   [LLM Vision](https://github.com/valentinfrlch/ha-llmvision), merged with the matching
   video
-- Nest doorbell clips for doorbell events described by AI
+- Nest doorbell clips for doorbell events described by AI, and, if you like, Nest
+  rings, people and motion as rows of their own
 - any event you log yourself
 
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=oddhus&repository=event-reel-card&category=plugin)
@@ -63,7 +64,7 @@ integration beyond core is optional:
 | Frigate | The [Frigate integration](https://github.com/blakeblackshear/frigate-hass-integration) | Review items, animated previews, exact clips, mark reviewed |
 | Event Reel | The [Event Reel integration](https://github.com/oddhus/event-reel) and an AI Task in Home Assistant | AI titles and descriptions for Nest doorbells and any camera, with the AI you already use (a local Ollama model, for example) |
 | LLM Vision | [LLM Vision](https://github.com/valentinfrlch/ha-llmvision) with the timeline enabled | AI titles and descriptions |
-| Nest | The Nest integration (core) | Doorbell clips for Event Reel and LLM Vision doorbell events |
+| Nest | The Nest integration (core) | Doorbell clips for Event Reel and LLM Vision doorbell events; with `nest: { events: true }`, rings, people and motion as rows |
 
 Frigate 0.17 and newer can also write AI summaries of its own reviews (`review.genai` in
 the Frigate config). The card shows them on the Frigate rows without anything else. When
@@ -171,7 +172,7 @@ cameras:
 | `llmvision` | auto | `true`, `false`, or an object with `non_camera` (default `true`), `categories` and `enabled`. |
 | `frigate` | auto | `true`, `false`, or an object with `cameras` (`auto` or a list), `severity` (default `[alert, detection]`), `show_unmatched` (default `true`), `hide_unconfirmed` (default `false`), `clip_padding` (default `[10, 20]` seconds) and `enabled`. |
 | `event_reel` | auto | `true` or `false`: AI descriptions from the Event Reel integration. |
-| `nest` | auto | `true` or `false`. Used for doorbell clips. |
+| `nest` | auto | `true`, `false`, or an object with `events` (default `false`) and `enabled`. Used for doorbell clips; `events: true` also shows the Nest cameras' events as rows. See [Nest events](#nest-events). |
 | `camera_aliases` | none | Maps another camera entity (or an LLM Vision camera name) to a canonical camera, e.g. a Reolink entity to the Frigate camera of the same device. Applies to Event Reel events too. |
 | `cameras` | none | Per camera entity: `name`, and `clip: auto` or `preview`. |
 | `grouping.window` | `120` | Seconds between events that still group into one row. |
@@ -256,6 +257,23 @@ Doors and Locks chips still find a row by its attached changes, and a filter tha
 a camera group keeps only the changes that joined the events it still shows. `camera` takes a
 camera entity id, or a name from `camera_aliases`, and is YAML only; the visual editor
 keeps it. Presence changes (`person`, `device_tracker`) always keep rows of their own.
+
+### Nest events
+
+Without Frigate, a Nest camera's own events can be the rows:
+
+```yaml
+nest:
+  events: true
+```
+
+Each ring, person and motion event of a Nest camera or doorbell becomes a row with its clip.
+Events of one Nest session (two presses of the bell, say) are one row, and the person seen
+before a ring joins the ring in the camera's group. AI text from Event Reel or LLM Vision
+about a Nest clip becomes that row's title and description. The card reads the history of
+the Nest `event` entities, so the rows go back as far as the recorder keeps history
+(10 days by default). A new card from the card picker has it on when Nest is installed and
+Frigate is not; the editor has a switch for it under Sources.
 
 ### Running next to an automation
 

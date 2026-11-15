@@ -15,6 +15,10 @@ All notable changes to this project are documented here. The project uses
   "Person arrives home" with "Front door: Unlocked · Open · Closed · Locked" under it,
   instead of two rows. Opening the row lists each change and who made it. Off unless set;
   see the README's "Doors next to a camera".
+- `nest: { events: true }` shows Nest rings, people and motion as rows with their clips,
+  from the history of the Nest `event` entities, so a home with Nest and no Frigate gets a
+  full timeline. AI text about a Nest clip joins its row. Off unless set (a new card has it
+  on when Nest is installed and Frigate is not); see the README's "Nest events".
 
 ### Changed
 

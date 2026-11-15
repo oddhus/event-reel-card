@@ -14,6 +14,8 @@ export type ExampleData = {
   logbook: LogbookEntry[];
   history: Record<string, { s: string; a: Record<string, unknown>; lu: number }[]>;
   nestToken: string;
+  /** History of the doorbell's Nest event entities (`nest: { events: true }`). */
+  nestEvents: Record<string, { s: string; a: Record<string, unknown>; lu: number }[]>;
 };
 
 const iso = (epoch: number) => new Date(epoch * 1000).toISOString();
@@ -241,5 +243,33 @@ export function exampleData(now: number): ExampleData {
   ];
   history["person.sam"] = [row("home", h(24.2)), row("not_home", h(10.5)), row("home", h(2.2))];
 
-  return { reviews, llmvision, eventReel, logbook, history, nestToken };
+  // The doorbell's own Nest events: a person a minute before the ring (its own session),
+  // the ring the AI described (the same token), and a person in the afternoon.
+  const trigger = (entity: string, at: number, type: string, token: string) => ({
+    entity,
+    row: { s: iso(at), a: { event_type: type, nest_event_id: token }, lu: at },
+  });
+  const nestEvents: ExampleData["nestEvents"] = {
+    "event.doorbell_chime": [],
+    "event.doorbell_motion": [],
+  };
+  for (const { entity, row } of [
+    trigger(
+      "event.doorbell_motion",
+      h(3) - 60,
+      "camera_person",
+      btoa(JSON.stringify([String(h(3) - 60), "11"])),
+    ),
+    trigger("event.doorbell_chime", h(3), "ring", nestToken),
+    trigger(
+      "event.doorbell_motion",
+      h(5.5),
+      "camera_person",
+      btoa(JSON.stringify([String(h(5.5)), "12"])),
+    ),
+  ]) {
+    nestEvents[entity].push(row);
+  }
+
+  return { reviews, llmvision, eventReel, logbook, history, nestToken, nestEvents };
 }

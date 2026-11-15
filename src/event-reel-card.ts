@@ -32,6 +32,12 @@ import type { Category } from "./types";
 import type { HomeAssistant } from "./ha-types";
 import { getLocalize, resolveLanguage } from "./i18n";
 import { createEntityProvider, latestEntityChangeBefore } from "./providers/entity";
+import {
+  createNestEventProvider,
+  latestNestBefore,
+  nestEntitiesSignature,
+  nestEventsChanged,
+} from "./providers/nest";
 import { createEventReelProvider, latestEventReelBefore } from "./providers/eventreel";
 import { frigateProvider, latestReviewBefore, markReviewed } from "./providers/frigate";
 import {
@@ -57,7 +63,7 @@ import "./ui/strip";
 
 export type { CardConfig as EventReelCardConfig };
 
-type ProviderType = "entity" | "llmvision" | "event_reel" | "frigate";
+type ProviderType = "entity" | "llmvision" | "event_reel" | "frigate" | "nest";
 
 /** Overridable clock (epoch seconds), for the dev harness. */
 export const clock = { now: () => Date.now() / 1000 };
@@ -143,6 +149,7 @@ export class EventReelCard extends LitElement {
     createLlmVisionProvider(),
     createEventReelProvider(),
     frigateProvider,
+    createNestEventProvider(),
   ];
   private _localize: Localize = getLocalize("en");
   private _language = "en";
@@ -263,7 +270,15 @@ export class EventReelCard extends LitElement {
     }
     if (!prev) return;
     const frigateChanged = this._frigateCamerasChanged(prev, hass);
-    if (prev.entities !== hass.entities || prev.services !== hass.services || frigateChanged) {
+    // Nest registers no services, so it is noticed when it joins the loaded components.
+    const nestLoaded =
+      prev.config.components.includes("nest") !== hass.config.components.includes("nest");
+    if (
+      prev.entities !== hass.entities ||
+      prev.services !== hass.services ||
+      frigateChanged ||
+      nestLoaded
+    ) {
       // An integration may show up after the card started (a cold load, HA restarting), or
       // go away: fetch from it, or drop its rows, now rather than on the next refresh.
       const before = this._activeTypes();
@@ -297,6 +312,15 @@ export class EventReelCard extends LitElement {
     if (this._status("llmvision") === "active" && timelineChanged(prev, hass)) {
       this._debouncedRefresh("llmvision", 2000);
     }
+    // A trigger, or Nest event entities that arrived after the first fetch.
+    if (
+      this._status("nest") === "active" &&
+      (nestEventsChanged(prev, hass) ||
+        (prev.entities !== hass.entities &&
+          nestEntitiesSignature(prev) !== nestEntitiesSignature(hass)))
+    ) {
+      this._debouncedRefresh("nest", 1000);
+    }
   }
 
   get hass(): HomeAssistant | undefined {
@@ -327,7 +351,14 @@ export class EventReelCard extends LitElement {
       ...pick((id) => id.startsWith("binary_sensor.") && doorClass(id)),
       ...pick((id) => id.startsWith("person.")),
     ];
-    return entities.length ? { entities } : {};
+    const components = hass.config.components;
+    // A Nest home without Frigate gets its camera events as rows; with Frigate, Nest only
+    // adds doorbell clips to AI text, as before.
+    const nestRows = components.includes("nest") && !components.includes("frigate");
+    return {
+      ...(entities.length ? { entities } : {}),
+      ...(nestRows ? { nest: { events: true } } : {}),
+    };
   }
 
   // ----- lifecycle -----
@@ -830,6 +861,8 @@ export class EventReelCard extends LitElement {
     if (this._status("frigate") === "active") {
       tasks.push(latestReviewBefore(ctx, range.start).catch(() => undefined));
     }
+    if (this._status("nest") === "active")
+      tasks.push(Promise.resolve(latestNestBefore(hass, range.start)));
     const times = (await Promise.all(tasks)).filter((t): t is number => typeof t === "number");
     if (token !== this._lastEarlierToken || this._items.length || this._day) return; // superseded
     this._lastEarlier = times.length ? Math.max(...times) : undefined;
