@@ -9,6 +9,12 @@ All notable changes to this project are documented here. The project uses
 
 - A Frigate clip whose recording has been deleted ("The recording has been deleted.") no
   longer offers a Download button that can only fail.
+- Long titles wrap to a second line (a door's chain of changes to a third) instead of being
+  cut off after a few words, which on a phone left little more than the first word or two.
+  An opened row shows its whole title. On a phone, or in a card up to 400 px wide,
+  comfortable density uses the smaller thumbnail, and in a card up to 600 px wide (such as a
+  sections view column) the camera and duration go under the title instead of beside it;
+  both give the titles room.
 
 ## [0.6.0] - 2026-10-29
 

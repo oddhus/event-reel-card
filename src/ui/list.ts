@@ -210,7 +210,7 @@ function renderItem(view: CardView, item: TimelineItem): TemplateResult {
     );
     return html`<div class="item ${view.highlight === item.id ? "highlight" : ""}" role="listitem">
       <button
-        class="row plain ${burstBand.cls} ${view.presence ? "presence" : ""}"
+        class="row plain burst ${burstBand.cls} ${view.presence ? "presence" : ""}"
         style=${burstBand.style}
         data-id=${item.id}
         aria-expanded=${open ? "true" : "false"}

@@ -205,4 +205,127 @@ describe("phone width", () => {
       await page.viewport(1024, 900);
     }
   });
+
+  test("at 375 px a door burst and a long AI title read in full (PLAN §5.2)", async () => {
+    await page.viewport(375, 800);
+    try {
+      const m = await mount({ parent: document.body });
+      await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+      await m.card.updateComplete;
+      const titleOf = (pred: (r: HTMLElement) => boolean, what: string) =>
+        must(rows(m).find(pred)?.querySelector<HTMLElement>(".title"), what);
+      // The example day has a four-step front door burst and an AI title of 36 characters;
+      // at this width neither fits on one line (presence is on, so the title column is narrow).
+      const burst = titleOf(
+        (r) => (r.dataset.id ?? "").startsWith("burst:") && r.textContent.includes("Front door"),
+        "burst title",
+      );
+      const car = titleOf(
+        (r) => r.textContent.includes("Unfamiliar car waits in the driveway"),
+        "AI title",
+      );
+      for (const title of [burst, car]) {
+        expect(title.getClientRects().length, "rendered").toBeGreaterThan(0);
+        // Nothing hidden sideways or below the line clamp.
+        expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth + 1);
+        expect(title.scrollHeight).toBeLessThanOrEqual(title.clientHeight + 1);
+        // And it really wrapped: more than one line.
+        const line = parseFloat(getComputedStyle(title).lineHeight) || 20;
+        expect(title.clientHeight).toBeGreaterThan(line * 1.5);
+      }
+    } finally {
+      await page.viewport(1024, 900);
+    }
+  });
+
+  test("at 320 px titles clamp at 2 lines, a burst at 3, and an opened row shows all", async () => {
+    const m = await mount({ width: 320 });
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    await m.card.updateComplete;
+    const rowWith = (text: string) =>
+      must(
+        rows(m).find((r) => r.textContent.includes(text)),
+        text,
+      );
+    // One line: the height of a short title (Alex coming home).
+    const line = must(rowWith("Alex").querySelector<HTMLElement>(".title")).clientHeight;
+    const lines = (el: HTMLElement) => Math.round(el.clientHeight / line);
+    // "Front door: Unlocked ×5 · Open · Closed · Locked" needs four lines here.
+    const burst = must(rowWith("Unlocked ×5").querySelector<HTMLElement>(".title"));
+    expect(lines(burst)).toBe(3);
+    expect(burst.scrollHeight).toBeGreaterThan(burst.clientHeight);
+    // "Unfamiliar car waits in the driveway" needs three.
+    const carRow = rowWith("Unfamiliar car waits in the driveway");
+    const car = must(carRow.querySelector<HTMLElement>(".title"));
+    expect(lines(car)).toBe(2);
+    expect(car.scrollHeight).toBeGreaterThan(car.clientHeight);
+
+    // Opened, the row shows the whole title.
+    await userEvent.click(carRow);
+    await m.card.updateComplete;
+    expect(car.scrollHeight).toBeLessThanOrEqual(car.clientHeight + 1);
+    expect(lines(car)).toBeGreaterThanOrEqual(3);
+  });
+
+  test("comfortable keeps its big preview in a narrow card on a desktop, the small one on a phone", async () => {
+    const measure = async (width = 440) => {
+      const m = await mount({ width, config: { density: "comfortable" } });
+      await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+      await m.card.updateComplete;
+      const row = must(root(m).querySelector<HTMLElement>(".row.camera"), "camera row");
+      const t = must(row.querySelector<HTMLElement>(".thumb"), "thumbnail").getBoundingClientRect();
+      const out = {
+        thumb: [Math.round(t.width), Math.round(t.height)],
+        minHeight: getComputedStyle(row).minHeight,
+        tall: row.getBoundingClientRect().height >= 72,
+      };
+      m.remove();
+      mounted = undefined;
+      return out;
+    };
+    // PLAN §5.2: comfortable is 112×63 with 72 px rows. A 440 px card on a desktop screen
+    // (a sections view column) keeps that; on a phone, or in a card under 400 px, the
+    // thumbnail is compact's 64×36 and the row keeps its height.
+    const big = { thumb: [112, 63], minHeight: "72px", tall: true };
+    const small = { thumb: [64, 36], minHeight: "72px", tall: true };
+    expect(await measure()).toEqual(big);
+    // A card under 400 px on a desktop screen (the editor preview, a narrow column): small.
+    expect(await measure(360)).toEqual(small);
+    await page.viewport(440, 900);
+    try {
+      expect(await measure()).toEqual(small);
+    } finally {
+      await page.viewport(1024, 900);
+    }
+  });
+
+  test("from 481 to 600 px the title keeps room, the camera line under it", async () => {
+    // PLAN §5.2: up to 600 px the camera/duration text goes under the title. Before, a 481 px
+    // card put it in a column and left the title about 130 px (80 px in comfortable).
+    for (const density of ["compact", "comfortable"] as const) {
+      for (const width of [481, 560, 600]) {
+        const m = await mount({ width, config: { density } });
+        await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+        await m.card.updateComplete;
+        const titles = rows(m).map((r) => must(r.querySelector<HTMLElement>(".title")).clientWidth);
+        expect(Math.min(...titles), `${density} at ${width} px`).toBeGreaterThanOrEqual(180);
+        const row = must(root(m).querySelector<HTMLElement>(".row.camera"));
+        const meta = must(row.querySelector<HTMLElement>(".meta"));
+        expect(getComputedStyle(meta).display).toBe("none");
+        // The camera and duration show under the title instead.
+        const sub = must(row.querySelector<HTMLElement>(".sub"), "camera line");
+        expect(getComputedStyle(sub).display).not.toBe("none");
+        expect(sub.textContent).toBe(meta.textContent);
+        expect(sub.textContent.trim()).not.toBe("");
+        m.remove();
+        mounted = undefined;
+      }
+    }
+    // Above 600 px the column is back.
+    const wide = await mount({ width: 601 });
+    await until(() => ids(wide).some((id) => id.startsWith("frigate:")));
+    await wide.card.updateComplete;
+    const meta = must(root(wide).querySelector<HTMLElement>(".row.camera .meta"));
+    expect(getComputedStyle(meta).display).not.toBe("none");
+  });
 });

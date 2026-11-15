@@ -218,11 +218,26 @@ export const styles = css`
     flex-direction: column;
     min-width: 0;
   }
+  /* A long title wraps rather than being cut after a few words: up to 2 lines for an
+     event, 3 for a door's chain of changes. A short title stays one line, so a row only
+     grows when its title needs the room, and an opened row shows the whole title. */
   .title {
     overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     font-size: 0.95em;
+  }
+  .row.burst .title {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+  .row[aria-expanded="true"] .title {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: none;
   }
   .state {
     color: var(--secondary-text-color);
@@ -330,7 +345,27 @@ export const styles = css`
     font-size: 1em;
   }
 
-  @container (max-width: 480px) {
+  /* On a phone, or in any card up to 400 px, comfortable keeps its description line and row
+     height but takes compact's thumbnail, which leaves the title column room. Between 400
+     and 480 px the card's width can't tell a large phone from a sections view column on a
+     desktop, so the screen decides: the desktop column keeps the big preview. */
+  @media (max-width: 600px) {
+    .list.comfortable {
+      --reel-slot-width: 64px;
+      --reel-thumb-height: 36px;
+    }
+  }
+  @container (max-width: 400px) {
+    .list.comfortable {
+      --reel-slot-width: 64px;
+      --reel-thumb-height: 36px;
+    }
+  }
+
+  /* A card up to 600 px wide: the camera, duration and actor go to a line under the title
+     instead of a column on the right, and the threat badge with them. With that column, a
+     card of 481–600 px left the title under 130 px (80 px in comfortable with presence). */
+  @container (max-width: 600px) {
     .row {
       gap: 8px;
       padding: 4px 10px 4px 12px;
