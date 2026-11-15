@@ -7,7 +7,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { hasSource } from "../core/capabilities";
 import { CATEGORY_COLORS, iconFor } from "../core/categories";
 import { bandAt } from "../core/context";
-import { capList } from "../core/filters";
+import { capList, isUnreviewed } from "../core/filters";
 import { homeDuring, whileNobodyHome } from "../core/presence";
 import type { BurstSegment, TimelineItem } from "../core/grouping";
 import { highestThreat, withFlagged } from "../core/threat";
@@ -167,7 +167,9 @@ function eventRow(
       <span class="meta">${meta}</span>
       ${presenceCell(view, opts.events ?? [e])}
       ${
-        e.frigate && e.reviewed === false
+        // A group shows the dot while any of its reviews is unreviewed, as the Unreviewed
+        // chip counts it.
+        (opts.events ?? [e]).some(isUnreviewed)
           ? html`<span
               class="dot"
               role="img"

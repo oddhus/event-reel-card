@@ -7,7 +7,7 @@ import { detectCapabilities, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
 import { findEvent, parseReelParam } from "./core/deeplink";
 import { scrollEdges } from "./core/overflow";
-import { itemEvents, visibleRows } from "./core/filters";
+import { allOf, isUnreviewed, itemEvents, visibleRows } from "./core/filters";
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
 import type { TimelineItem } from "./core/grouping";
@@ -23,6 +23,7 @@ import {
   pastDayTakesLive,
   presenceEntities,
   presenceFetchStart,
+  whileNobodyHome,
 } from "./core/presence";
 import type { Presence } from "./core/presence";
 import { browserTimeZone, computeRange, dayKey, dayRange, shiftDay } from "./core/time";
@@ -225,6 +226,10 @@ export class EventReelCard extends LitElement {
     // Band keys are positions in `context`; picked ones mean something else after a change.
     else if (prev && JSON.stringify(prev.context) !== JSON.stringify(next.context)) {
       this._filter = { ...this._filter, bands: undefined };
+    }
+    // A change to `presence` changes who counts as home, so the "nobody home" pick goes too.
+    if (prev && JSON.stringify(prev.presence) !== JSON.stringify(next.presence)) {
+      this._filter = { ...this._filter, nobodyHome: undefined };
     }
     const leaveDay = !next.dayNavigation && this._day !== undefined;
     if (leaveDay) this._setDay(undefined);
@@ -963,11 +968,11 @@ export class EventReelCard extends LitElement {
     const categories = new Set(this._filter.categories);
     if (categories.has(c)) categories.delete(c);
     else categories.add(c);
-    this._filter = { ...this._filter, categories };
+    this._setFilter({ ...this._filter, categories });
   }
 
   private _setCamera(key: string) {
-    this._filter = { ...this._filter, camera: key || undefined };
+    this._setFilter({ ...this._filter, camera: key || undefined });
   }
 
   private async _markReviewed(events: ReelEvent[]) {
@@ -975,8 +980,23 @@ export class EventReelCard extends LitElement {
     const targets = events.filter((e) => e.frigate?.reviewId && e.reviewed === false);
     if (!hass || !targets.length) return;
     for (const e of targets) this._reviewed.add(e.id);
+    // With "Unreviewed" picked the marked row leaves the list; close it, so it doesn't open
+    // again (with its media) when the chip is switched off.
+    const open = this._openId;
+    if (this._filter.unreviewed && open) {
+      if (targets.some((e) => e.id === open || !!e.aliases?.includes(open))) {
+        this._openId = undefined;
+      }
+    }
+    // The rows after the marked one, then those before it, nearest first: where focus goes
+    // when the marked row leaves the list.
+    const shown = [...this.renderRoot.querySelectorAll<HTMLElement>("button.row")].map(
+      (r) => r.dataset.id ?? "",
+    );
+    const at = targets.length === 1 ? shown.indexOf(targets[0].id) : -1;
+    const near = at < 0 ? [] : [...shown.slice(at + 1), ...shown.slice(0, at).reverse()];
     this._recompute();
-    void this._keepFocusAfterMarking(targets.length === 1 ? targets[0].id : undefined);
+    void this._keepFocusAfterMarking(targets.length === 1 ? targets[0].id : undefined, near);
     try {
       await markReviewed(
         hass,
@@ -997,16 +1017,22 @@ export class EventReelCard extends LitElement {
   }
 
   /** The pressed button disappears after marking; keep keyboard focus nearby. */
-  private async _keepFocusAfterMarking(eventId?: string) {
+  private async _keepFocusAfterMarking(eventId?: string, near: string[] = []) {
     const active = this.renderRoot instanceof ShadowRoot ? this.renderRoot.activeElement : null;
     if (!active) return;
     await this.updateComplete;
+    const row = (id: string) =>
+      this.renderRoot.querySelector<HTMLElement>(`button.row[data-id="${CSS.escape(id)}"]`);
+    // The marked row if it is still listed, else its nearest neighbour that is.
     const target =
-      (eventId &&
-        this.renderRoot.querySelector<HTMLElement>(
-          `button.row[data-id="${CSS.escape(eventId)}"]`,
-        )) ||
-      this.renderRoot.querySelector<HTMLElement>("button.row");
+      [eventId, ...near].reduce<HTMLElement | null>(
+        (found, id) => found ?? (id ? row(id) : null),
+        null,
+      ) ??
+      this.renderRoot.querySelector<HTMLElement>("button.row") ??
+      // No row left ("Unreviewed" picked): the picked chip, or "Show all".
+      this.renderRoot.querySelector<HTMLElement>('.fchip[aria-pressed="true"]') ??
+      this.renderRoot.querySelector<HTMLElement>(".empty .linkish");
     target?.focus();
   }
 
@@ -1100,6 +1126,8 @@ export class EventReelCard extends LitElement {
       toggleGroup: (id) => this._toggleGroup(id),
       toggleCategory: (c) => this._toggleCategory(c),
       toggleBand: (key) => this._toggleBand(key),
+      toggleUnreviewed: () => this._toggleUnreviewed(),
+      toggleNobodyHome: () => this._toggleNobodyHome(),
       setCamera: (key) => this._setCamera(key),
       markReviewed: (events) => void this._markReviewed(events),
       moreInfo: (entityId) => this._moreInfo(entityId),
@@ -1158,11 +1186,54 @@ export class EventReelCard extends LitElement {
     return computePresence(people, this._context, this._viewRange()!, clock.now());
   }
 
+  private _toggleUnreviewed() {
+    this._setFilter({ ...this._filter, unreviewed: !this._filter.unreviewed || undefined });
+  }
+
+  private _toggleNobodyHome() {
+    this._setFilter({ ...this._filter, nobodyHome: !this._filter.nobodyHome || undefined });
+  }
+
   private _toggleBand(key: string) {
     const bands = new Set(this._filter.bands);
     if (bands.has(key)) bands.delete(key);
     else bands.add(key);
-    this._filter = { ...this._filter, bands };
+    this._setFilter({ ...this._filter, bands });
+  }
+
+  /** The rows the list shows for a filter: filtered, then capped (§5.1). */
+  private _visible(filter = this._filter) {
+    // A picked band the config no longer has is ignored, so it can't hide every row.
+    const picked = this._bands.filter((b) => filter.bands?.has(b.key));
+    const presence = this._presence;
+    // The per-event chips, all of which a row's event must pass (§5.1). "Nobody home" is
+    // ignored while presence is off, like a band the config no longer has.
+    const hit = allOf(
+      picked.length ? inAnyBand(picked) : undefined,
+      filter.unreviewed ? isUnreviewed : undefined,
+      filter.nobodyHome && presence ? (e) => whileNobodyHome(presence, e) : undefined,
+    );
+    return visibleRows(
+      this._items,
+      filter,
+      this._config!.maxEvents,
+      (item) => itemEvents(item).some((e) => this._isReached(e)),
+      hit,
+    );
+  }
+
+  /**
+   * Sets the filter from a chip or the camera menu. An open row the new filter hides is
+   * closed, so it doesn't open again (with its media) when the filter is switched off.
+   */
+  private _setFilter(next: FilterState) {
+    this._filter = next;
+    const open = this._openId;
+    if (!open) return;
+    const listed = this._visible(next).list.some((item) =>
+      itemEvents(item).some((e) => e.id === open || !!e.aliases?.includes(open)),
+    );
+    if (!listed) this._openId = undefined;
   }
 
   protected override render() {
@@ -1171,20 +1242,16 @@ export class EventReelCard extends LitElement {
     this._bands = this._computeBands();
     this._presence = this._computePresence();
     const view = this._view();
-    // A picked band the config no longer has is ignored, so it can't hide every row.
-    const picked = this._bands.filter((b) => this._filter.bands?.has(b.key));
-    const inBand = picked.length ? inAnyBand(picked) : undefined;
-    const shown = visibleRows(
-      this._items,
-      this._filter,
-      this._config.maxEvents,
-      (item) => itemEvents(item).some((e) => this._isReached(e)),
-      inBand,
-    );
+    const shown = this._visible();
     const filtered = shown.list;
     // A quiet day still shows its bands: the strip, their chips (at 0) and the legend.
+    // A picked chip keeps the bar up on an empty day too, so it can be switched off there.
+    const f = this._filter;
+    const picks =
+      f.categories.size > 0 || !!f.camera || !!f.bands?.size || !!f.unreviewed || !!f.nobodyHome;
     const showBar =
-      this._loaded && (this._items.length > 0 || this._bands.some((b) => b.intervals.length));
+      this._loaded &&
+      (this._items.length > 0 || this._bands.some((b) => b.intervals.length) || picks);
     return html`
       <ha-card .header=${this._config.title || undefined}>
         ${renderDayNav(view)} ${renderWarnings(view)}

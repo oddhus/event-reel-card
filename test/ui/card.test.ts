@@ -394,3 +394,168 @@ describe("phone width", () => {
     }
   });
 });
+
+describe("Unreviewed and Nobody home chips (PLAN §5.1, §5.10)", () => {
+  const chipByClass = (m: Mounted, cls: string) =>
+    must(root(m).querySelector<HTMLElement>(`.fchip.${cls}`), cls);
+
+  const frigateIds = (m: Mounted) => ids(m).filter((id) => id.startsWith("frigate:"));
+  const frigateId = (reviewId: string) => `frigate:frigate:${reviewId}`;
+
+  test("Unreviewed keeps only the reviews nobody marked, and counts them", async () => {
+    // One review of the example day is marked reviewed in Frigate before the card loads.
+    const m = await mount({ hold: ["frigate"] });
+    const reviewed = m.data.reviews[0];
+    reviewed.has_been_reviewed = true;
+    m.release("frigate");
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    const expected = m.data.reviews.filter((r) => !r.has_been_reviewed).map((r) => frigateId(r.id));
+    expect(expected.length).toBe(m.data.reviews.length - 1);
+
+    const chip = chipByClass(m, "unreviewedchip");
+    expect(Number(chip.querySelector(".n")?.textContent)).toBe(expected.length);
+    await userEvent.click(chip);
+    await m.card.updateComplete;
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    // Only Frigate rows, and exactly the unreviewed ones.
+    expect(ids(m).every((id) => id.startsWith("frigate:"))).toBe(true);
+    expect([...frigateIds(m)].sort()).toEqual([...expected].sort());
+    expect(ids(m)).not.toContain(frigateId(reviewed.id));
+  });
+
+  test("Nobody home keeps only the events while nobody was home", async () => {
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    // From the example's presence history: the house is empty from Sam leaving (Alex left
+    // earlier) until Sam comes back. The first and last 10 minutes aren't flagged (PLAN §5.10).
+    const left = (id: string) =>
+      Math.max(...m.data.history[id].filter((r) => r.s === "not_home").map((r) => r.lu));
+    const empty = { start: Math.max(left("person.alex"), left("person.sam")) + 600 };
+    const back = Math.min(
+      ...["person.alex", "person.sam"].flatMap((id) =>
+        m.data.history[id].filter((r) => r.s === "home" && r.lu > empty.start).map((r) => r.lu),
+      ),
+    );
+    const end = back - 600;
+    const inside = m.data.reviews
+      .filter((r) => r.start_time >= empty.start && r.start_time <= end)
+      .map((r) => frigateId(r.id));
+    expect(inside.length).toBeGreaterThan(0);
+
+    const chip = chipByClass(m, "nobodychip");
+    await userEvent.click(chip);
+    await m.card.updateComplete;
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    // Every review inside the empty house shows, and none outside it.
+    expect([...frigateIds(m)].sort()).toEqual([...inside].sort());
+    // Every row left is flagged; the chip counts them.
+    for (const r of rows(m)) expect(r.querySelector(".home .nobody"), r.dataset.id).not.toBeNull();
+    expect(Number(chip.querySelector(".n")?.textContent)).toBe(rows(m).length);
+  });
+
+  test("a picked chip stays on an empty day, so it can be switched off there", async () => {
+    // Without context bands, which would keep the bar up on their own.
+    const m = await mount({ config: { context: [] } });
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    await userEvent.click(chipByClass(m, "unreviewedchip"));
+    await m.card.updateComplete;
+
+    // The example data has nothing yesterday, so the list shows the empty state.
+    await userEvent.click(must(root(m).querySelector<HTMLElement>(".navbtn.prev")));
+    await until(() => status(m) === en["empty.yesterday"]);
+    const chip = chipByClass(m, "unreviewedchip");
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(chip);
+    await m.card.updateComplete;
+    expect(root(m).querySelector(".fchip.unreviewedchip[aria-pressed=true]")).toBeNull();
+  });
+
+  const markInDetail = async (m: Mounted) => {
+    const button = must(
+      [...root(m).querySelectorAll<HTMLElement>(".detail button")].find(
+        (b) => b.textContent.trim() === en["action.mark_reviewed"],
+      ),
+      "Mark reviewed",
+    );
+    await userEvent.click(button);
+    await m.card.updateComplete;
+    await m.card.updateComplete;
+  };
+
+  test("marking a row with Unreviewed picked closes it and moves focus to the next row", async () => {
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    await userEvent.click(chipByClass(m, "unreviewedchip"));
+    await m.card.updateComplete;
+    const before = ids(m);
+    expect(before.length).toBeGreaterThan(2);
+    // The second row: there is a row after it and one before it.
+    await userEvent.click(rows(m)[1]);
+    await m.card.updateComplete;
+    await markInDetail(m);
+
+    await until(() => ids(m).length === before.length - 1);
+    expect(ids(m)).toEqual([before[0], ...before.slice(2)]);
+    expect(rows(m).filter((r) => r.getAttribute("aria-expanded") === "true")).toEqual([]);
+    expect(root(m).activeElement).toBe(rows(m)[1]);
+    expect((root(m).activeElement as HTMLElement).dataset.id).toBe(before[2]);
+
+    // Switching the chip off doesn't open the marked row again.
+    await userEvent.click(chipByClass(m, "unreviewedchip"));
+    await m.card.updateComplete;
+    expect(root(m).querySelectorAll(".detail")).toHaveLength(0);
+  });
+
+  test("marking the last unreviewed row leaves focus on the picked chip", async () => {
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    await userEvent.click(chipByClass(m, "unreviewedchip"));
+    await m.card.updateComplete;
+    // Mark all but one with the toolbar button's action, then the last one from its detail.
+    while (rows(m).length > 1) {
+      await userEvent.click(rows(m)[0]);
+      await m.card.updateComplete;
+      const n = rows(m).length;
+      await markInDetail(m);
+      await until(() => rows(m).length === n - 1);
+    }
+    await userEvent.click(rows(m)[0]);
+    await m.card.updateComplete;
+    await markInDetail(m);
+    await until(() => rows(m).length === 0);
+    expect(root(m).activeElement).toBe(chipByClass(m, "unreviewedchip"));
+  });
+
+  test("a chip that hides the open row closes it", async () => {
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    // A row with people home, opened, then hidden by Nobody home.
+    const home = must(
+      rows(m).find((r) => r.classList.contains("camera") && !r.querySelector(".home .nobody")),
+      "camera row with people home",
+    );
+    const id = home.dataset.id;
+    await userEvent.click(home);
+    await m.card.updateComplete;
+    expect(root(m).querySelectorAll(".detail")).toHaveLength(1);
+    await userEvent.click(chipByClass(m, "nobodychip"));
+    await m.card.updateComplete;
+    expect(ids(m)).not.toContain(id);
+    await userEvent.click(chipByClass(m, "nobodychip"));
+    await m.card.updateComplete;
+    expect(ids(m)).toContain(id);
+    expect(root(m).querySelectorAll(".detail")).toHaveLength(0);
+  });
+
+  test("a change to presence clears the Nobody home pick", async () => {
+    const m = await mount();
+    await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+    await userEvent.click(chipByClass(m, "nobodychip"));
+    await m.card.updateComplete;
+    const all = ids(m).length;
+    m.card.setConfig({ ...m.config, presence: ["person.alex"] });
+    await until(() => !!root(m).querySelector(".fchip.nobodychip"));
+    expect(chipByClass(m, "nobodychip").getAttribute("aria-pressed")).toBe("false");
+    await until(() => ids(m).length >= all);
+  });
+});

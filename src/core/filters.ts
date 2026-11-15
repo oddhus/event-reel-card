@@ -27,7 +27,27 @@ export type FilterState = {
   camera?: string;
   /** Context band entities (§5.6); empty or undefined = no band filter. */
   bands?: Set<string>;
+  /** Only Frigate reviews nobody has marked reviewed yet. */
+  unreviewed?: boolean;
+  /** Only events while nobody was home (§5.10). */
+  nobodyHome?: boolean;
 };
+
+export type EventTest = (e: ReelEvent) => boolean;
+
+/** A Frigate review nobody has marked reviewed. */
+export const isUnreviewed: EventTest = (e) => !!e.frigate?.reviewId && e.reviewed === false;
+
+/** The tests that are set, all of which an event must pass; undefined when none is set. */
+export function allOf(...tests: (EventTest | undefined)[]): EventTest | undefined {
+  const set = tests.filter((x): x is EventTest => !!x);
+  if (!set.length) return undefined;
+  return (e) => set.every((test) => test(e));
+}
+
+/** Rows with at least one event that passes `test`, for a chip's count. */
+export const countRows = (items: TimelineItem[], test: EventTest) =>
+  items.filter((item) => itemEvents(item).some(test)).length;
 
 /** The camera an event belongs to, for the camera filter; not per-event media keys. */
 export function cameraKey(e: ReelEvent): string | undefined {
@@ -173,16 +193,17 @@ export function narrowItems(items: TimelineItem[], hit: (e: ReelEvent) => boolea
 }
 
 /**
- * Category and camera keep whole rows. `inBand` (from the selected band chips) narrows camera
- * groups to events inside a band; with category chips on, the same event must also be in one
- * of those categories, so a group never shows an event of another category.
+ * Category and camera keep whole rows. `hit`, the per-event chips (a band, unreviewed,
+ * nobody home; the card composes them with `allOf`), narrows camera groups to the events
+ * that pass it; with category chips on, the same event must also be in one of those
+ * categories, so a group never shows an event of another category. A burst stays whole.
  */
 export function applyFilters(
   items: TimelineItem[],
   state: FilterState,
-  inBand?: (e: ReelEvent) => boolean,
+  hit?: EventTest,
 ): TimelineItem[] {
-  if (!state.categories.size && !state.camera && !inBand) return items;
+  if (!state.categories.size && !state.camera && !hit) return items;
   const kept = items.filter((item) => {
     if (state.categories.size) {
       const cats = itemCategories(item);
@@ -191,9 +212,9 @@ export function applyFilters(
     if (state.camera && !itemCameras(item).has(state.camera)) return false;
     return true;
   });
-  if (!inBand) return kept;
+  if (!hit) return kept;
   const cats = state.categories;
-  return narrowItems(kept, (e) => inBand(e) && (!cats.size || cats.has(e.category)));
+  return narrowItems(kept, (e) => hit(e) && (!cats.size || cats.has(e.category)));
 }
 
 /**
@@ -205,7 +226,7 @@ export function visibleRows(
   state: FilterState,
   max: number,
   keep?: (item: TimelineItem) => boolean,
-  inBand?: (e: ReelEvent) => boolean,
+  hit?: EventTest,
 ): Capped<TimelineItem> {
-  return capItems(applyFilters(items, state, inBand), max, keep);
+  return capItems(applyFilters(items, state, hit), max, keep);
 }

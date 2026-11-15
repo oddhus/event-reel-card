@@ -36,6 +36,8 @@ export type MountOptions = {
 
 export type Mounted = {
   card: EventReelCard;
+  /** The config the card was set up with. */
+  config: CardConfig;
   /** The container the card is in. */
   stage: HTMLElement;
   data: ExampleData;
@@ -262,7 +264,7 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
   (opts.parent ?? document.body).appendChild(stage);
 
   const card = document.createElement("event-reel-card") as EventReelCard;
-  card.setConfig({
+  const config: CardConfig = {
     type: "custom:event-reel-card",
     title: "Today's events",
     density: "compact",
@@ -278,7 +280,8 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
     ],
     presence: true,
     ...opts.config,
-  });
+  };
+  card.setConfig(config);
   stage.appendChild(card);
 
   let language = opts.language ?? "en";
@@ -304,6 +307,7 @@ export async function mountCard(opts: MountOptions = {}): Promise<Mounted> {
 
   return {
     card,
+    config,
     stage,
     data,
     setHass,
