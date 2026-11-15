@@ -277,3 +277,24 @@ moves onto a camera row when that camera's sources answer late. Fixed:
 Rebutted: a camera row is sorted and labelled by its camera event, not by its latest
 attached change. Left open: with a very small `max_events`, a split burst's remaining part
 can fall under the cap.
+
+**2026-11-15, Nest events as rows.** Three rounds by a fresh Fable 5.2 context and
+GPT-6-sol (xhigh), after a read-only check of the event entities on a live install (PLAN
+§2.3). Fixed:
+- The recorder stores a trigger seconds after the state changes, so the provider also reads
+  each entity's current state (allowing 60 s of clock skew), and the card refetches when
+  Nest event entities appear or Nest finishes loading, not only on a trigger.
+- AI text joins its Nest row by a `nestToken` field, so LLM Vision text whose device wasn't
+  found and Event Reel text without a clip still join; two producers' texts about one Nest
+  event collapse by token even without a clip or camera.
+- Nest's own type wins over LLM Vision's doorbell guess, a ring stays a doorbell, and a
+  more specific AI category names the row whichever producer answered first.
+- Row ids are `nest:<device>:<session>`, stable when a visit's first trigger leaves the
+  range; dedupe is per device; labels are translated; the empty state's "last event"
+  includes Nest; the harness mock honours `entity_ids`.
+Rebutted: in-place changes to `hass.entities` (HA replaces the object); links to
+`nest:<token>` ids (never released); identical tokens on two devices (tokens carry a
+session counter); with two AI producers on one ring, "doorbell" from either still wins over
+the other's category (the rule on main). Left open: texts joined to Nest rows don't count
+toward `hide_unconfirmed` (PLAN §3.5). Not checked yet: a dev build on a real Home
+Assistant (clip playback, signing, resolve of these tokens).
