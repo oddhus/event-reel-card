@@ -328,4 +328,69 @@ describe("phone width", () => {
     const meta = must(root(wide).querySelector<HTMLElement>(".row.camera .meta"));
     expect(getComputedStyle(meta).display).not.toBe("none");
   });
+
+  test("at 375 px the chip bar shows which side has more chips, and the camera menu is an icon", async () => {
+    await page.viewport(375, 800);
+    try {
+      const m = await mount({ parent: document.body });
+      await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+      await m.card.updateComplete;
+      const bar = must(root(m).querySelector<HTMLElement>(".chipbar"), "chip bar");
+      const faded = () => [
+        bar.classList.contains("more-left"),
+        bar.classList.contains("more-right"),
+      ];
+      // The example day has more chips than fit: more to the right at first …
+      expect(bar.scrollWidth).toBeGreaterThan(bar.clientWidth);
+      await until(() => faded()[1]);
+      expect(faded()).toEqual([false, true]);
+      // … more on both sides in the middle, and only to the left at the end.
+      bar.scrollLeft = 40;
+      await until(() => faded()[0]);
+      expect(faded()).toEqual([true, true]);
+      bar.scrollLeft = bar.scrollWidth;
+      await until(() => !faded()[1]);
+      expect(faded()).toEqual([true, false]);
+
+      // The camera menu takes an icon's room until a camera is picked, then shows its name.
+      const wrap = must(root(m).querySelector<HTMLElement>(".camwrap"), "camera menu");
+      expect(wrap.getBoundingClientRect().width).toBeLessThanOrEqual(40);
+      const select = must(wrap.querySelector<HTMLSelectElement>("select"));
+      expect(select.getAttribute("aria-label")).toBe(en["filter.camera"]);
+      select.value = select.options[1].value;
+      select.dispatchEvent(new Event("change"));
+      await m.card.updateComplete;
+      expect(wrap.getBoundingClientRect().width).toBeGreaterThan(60);
+      expect(getComputedStyle(select).opacity).toBe("1");
+    } finally {
+      await page.viewport(1024, 900);
+    }
+  });
+
+  test("right to left, the fade is on the left, where the hidden chips are", async () => {
+    await page.viewport(375, 800);
+    const parent = document.createElement("div");
+    parent.dir = "rtl";
+    document.body.appendChild(parent);
+    try {
+      const m = await mount({ parent });
+      await until(() => ids(m).some((id) => id.startsWith("frigate:")));
+      await m.card.updateComplete;
+      const bar = must(root(m).querySelector<HTMLElement>(".chipbar"), "chip bar");
+      const faded = () => [
+        bar.classList.contains("more-left"),
+        bar.classList.contains("more-right"),
+      ];
+      expect(getComputedStyle(bar).direction).toBe("rtl");
+      await until(() => faded()[0]);
+      expect(faded()).toEqual([true, false]);
+      // Scrolled to the far end (the left), only the right has more.
+      bar.scrollLeft = -bar.scrollWidth;
+      await until(() => !faded()[0]);
+      expect(faded()).toEqual([false, true]);
+    } finally {
+      parent.remove();
+      await page.viewport(1024, 900);
+    }
+  });
 });

@@ -362,10 +362,46 @@ export const styles = css`
     }
   }
 
-  /* A card up to 600 px wide: the camera, duration and actor go to a line under the title
+  /* A card up to 600 px wide: the camera, duration and actor go to a line under the title,
      instead of a column on the right, and the threat badge with them. With that column, a
      card of 481–600 px left the title under 130 px (80 px in comfortable with presence). */
   @container (max-width: 600px) {
+    /* The camera menu is an icon until a camera is picked, so the chips get the room. The
+       select lies over the icon, invisible, and opens as usual. */
+    .camwrap:not(.picked) {
+      box-sizing: border-box;
+      width: 34px;
+      height: 28px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--divider-color);
+      border-radius: 14px;
+      color: var(--primary-text-color);
+      --mdc-icon-size: 16px;
+    }
+    .camwrap:not(.picked) ha-icon {
+      display: inline-flex;
+    }
+    .camwrap:not(.picked) .camsel {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .camwrap:not(.picked):has(.camsel:focus-visible) {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+    /* Without :has() (Firefox ESR 115), any focus shows the ring. */
+    @supports not selector(:has(*)) {
+      .camwrap:not(.picked):focus-within {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+      }
+    }
     .row {
       gap: 8px;
       padding: 4px 10px 4px 12px;
@@ -494,6 +530,8 @@ export const styles = css`
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
+    /* A chip reached with Tab stops clear of the edge fade. */
+    scroll-padding-inline: 28px;
   }
   .chipbar::-webkit-scrollbar {
     display: none;
@@ -530,6 +568,39 @@ export const styles = css`
   }
   .camsel {
     padding-right: 6px;
+  }
+  .camwrap {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+  }
+  .camwrap ha-icon {
+    display: none;
+  }
+  /* More chips out of view: fade the bar's edge on that side, so it reads as scrollable. */
+  .chipbar.more-right {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+  .chipbar.more-left {
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+  }
+  .chipbar.more-left.more-right {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 28px,
+      #000 calc(100% - 28px),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 28px,
+      #000 calc(100% - 28px),
+      transparent
+    );
   }
   .markall {
     color: var(--primary-color);

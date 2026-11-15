@@ -233,3 +233,16 @@ context and GPT-6-sol (xhigh), each on the fixes of the round before. Changes:
 
 Not changed: `docs/demo.gif` (540 px) still shows the camera column; retake it with the
 next recording. WebKit was checked by GPT only (Playwright's WebKit on Windows).
+
+**2026-11-14, the chip bar on a phone.** Three rounds by a fresh Fable 5.2 context and
+GPT-6-sol (xhigh). Fixed:
+- Right to left, `scrollLeft` runs from 0 to negative, so the wrong edge faded and never
+  cleared. The fade classes now name physical sides (`more-left`, `more-right`), and the
+  offset is direction-aware and clamped, so Safari's rubber-band bounce counts as the end.
+- The fade also updates when a chip's width changes without a scroll or resize (an icon
+  that loads late), and after the card is moved in the page.
+- A chip reached with Tab stops clear of the fade (`scroll-padding-inline`).
+- The icon-sized camera menu shows its focus ring for keyboard focus only, with a
+  `:focus-within` fallback where `:has()` is missing (Firefox ESR 115).
+- The CHANGELOG says the icon applies in any card up to 600 px wide, which includes a
+  sections column on a desktop, not only a phone.

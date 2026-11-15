@@ -654,6 +654,13 @@ M1:
 Later:
 - **Summary and filter chips (P1):** counts per category ("5 persons · 3 door ·
   1 doorbell"). Tapping one toggles a filter. A camera filter menu sits at the end.
+  The chips scroll sideways in one line; the bar fades at an edge with more chips out of
+  view (`more-left`/`more-right`, physical sides so right-to-left works, from
+  `core/overflow.ts`, updated on render, scroll and on resizing the bar or a chip). In a card
+  up to 600 px wide (the narrow row layout, §5.2) the camera menu is an icon (the native
+  select lies over it, invisible) until a camera is picked, which gives the chips about
+  75 px more (in English).
+  The band chips still lead (§5.6).
 - **Day strip (P1):** a 24 h bar about 28 px high, with one tick per event colored by
   category, faint hourly activity in the background, context bands and a "now" line.
   Tap or drag to scroll the list to that time.

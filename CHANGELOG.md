@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The project uses
 
 ## Unreleased
 
+### Changed
+
+- The filter chips fade at the edge where more of them are out of view, so it shows that
+  the row scrolls. In a narrow card (up to 600 px wide, such as on a phone or in a sections
+  column) the camera menu is an icon until you pick a camera, which leaves the chips more room.
+
 ### Fixed
 
 - A Frigate clip whose recording has been deleted ("The recording has been deleted.") no

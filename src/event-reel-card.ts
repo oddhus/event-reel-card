@@ -6,6 +6,7 @@ import type { CameraRegistry } from "./core/cameras";
 import { detectCapabilities, providerStatus } from "./core/capabilities";
 import type { Capabilities } from "./core/capabilities";
 import { findEvent, parseReelParam } from "./core/deeplink";
+import { scrollEdges } from "./core/overflow";
 import { itemEvents, visibleRows } from "./core/filters";
 import type { FilterState } from "./core/filters";
 import { groupTimeline } from "./core/grouping";
@@ -193,6 +194,8 @@ export class EventReelCard extends LitElement {
   /** Names of cameras seen in the camera menu, for keeping the active one listed. */
   private _cameraNames = new Map<string, string>();
   private _stickyObserver?: ResizeObserver;
+  /** The chip bar whose scroll edges are tracked, and what tracks them. */
+  private _chipbar?: { el: HTMLElement; observer: ResizeObserver; onScroll: () => void };
   /** A burst member opened by a deep link, highlighted inside the expanded burst. */
   private _linkedEvent?: string;
   /**
@@ -330,6 +333,8 @@ export class EventReelCard extends LitElement {
     window.addEventListener("popstate", this._readDeepLink);
     this._readDeepLink();
     this._maybeStart();
+    // Moved in the page (edit mode, a sections drag): watch the chip bar again.
+    if (this.hasUpdated) this.requestUpdate();
   }
 
   override disconnectedCallback() {
@@ -341,6 +346,7 @@ export class EventReelCard extends LitElement {
     window.clearTimeout(this._highlightTimer);
     this._stickyObserver?.disconnect();
     this._stickyObserver = undefined;
+    this._unwatchChipbar();
     this._stop();
   }
 
@@ -1231,7 +1237,45 @@ export class EventReelCard extends LitElement {
     `;
   }
 
+  /**
+   * Marks the sides of the chip bar that have more chips out of view (`more-left`,
+   * `more-right`), for the edge fade that shows the bar scrolls. Its chips change on render,
+   * its scroll position on scroll, and its width or a chip's width (an icon that loads late)
+   * on resize.
+   */
+  private _watchChipbar() {
+    const el = this.renderRoot.querySelector<HTMLElement>(".chipbar") ?? undefined;
+    if (this._chipbar?.el !== el) {
+      this._unwatchChipbar();
+      if (!el) return;
+      const update = () => {
+        const rtl = getComputedStyle(el).direction === "rtl";
+        const edges = scrollEdges(el.scrollLeft, el.clientWidth, el.scrollWidth, rtl);
+        el.classList.toggle("more-left", edges.left);
+        el.classList.toggle("more-right", edges.right);
+      };
+      const observer = new ResizeObserver(update);
+      el.addEventListener("scroll", update, { passive: true });
+      this._chipbar = { el, observer, onScroll: update };
+    }
+    // The chips may have changed: observe the bar and each chip again.
+    const watch = this._chipbar;
+    if (!watch) return;
+    watch.observer.disconnect();
+    watch.observer.observe(watch.el);
+    for (const chip of watch.el.children) watch.observer.observe(chip);
+    watch.onScroll();
+  }
+
+  private _unwatchChipbar() {
+    if (!this._chipbar) return;
+    this._chipbar.observer.disconnect();
+    this._chipbar.el.removeEventListener("scroll", this._chipbar.onScroll);
+    this._chipbar = undefined;
+  }
+
   protected override updated() {
+    this._watchChipbar();
     const sticky = this.renderRoot.querySelector<HTMLElement>(".sticky");
     if (!sticky) {
       this.style.removeProperty("--reel-sticky-height");
