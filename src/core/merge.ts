@@ -87,6 +87,10 @@ function collapseSameClip(texts: ReelEvent[]): ReelEvent[] {
     return {
       ...first,
       clip: first.clip ?? rest.find((r) => r.clip)?.clip,
+      camera: first.camera ?? rest.find((r) => r.camera)?.camera,
+      cameraLabel: first.camera
+        ? first.cameraLabel
+        : (rest.find((r) => r.camera)?.cameraLabel ?? first.cameraLabel),
       sources: [...new Set(same.flatMap((s) => s.sources))],
       aliases: [...(first.aliases ?? []), ...rest.flatMap((r) => [r.id, ...(r.aliases ?? [])])],
       description: first.description ?? rest.find((r) => r.description)?.description,
@@ -133,8 +137,13 @@ function joinNest(events: ReelEvent[]): { nest: ReelEvent[]; others: ReelEvent[]
     // motion row doesn't become one because LLM Vision calls every Nest clip a doorbell.
     // A more specific AI category (a package, say) still names a person or motion row.
     if (row.category === "doorbell") return { ...merged, category: "doorbell" as const };
-    const guess = merged.category === "doorbell" || VAGUE.includes(merged.category);
-    return guess ? { ...merged, category: row.category } : merged;
+    const specific = (c: ReelEvent["category"]) => c !== "doorbell" && !VAGUE.includes(c);
+    if (specific(merged.category)) return merged;
+    // The earliest text guessed: a later, more specific one still names the row.
+    return {
+      ...merged,
+      category: texts.find((t) => specific(t.category))?.category ?? row.category,
+    };
   });
   return { nest, others };
 }
@@ -145,9 +154,18 @@ export function mergeEvents(events: ReelEvent[], opts: MergeOptions): ReelEvent[
 }
 
 function mergeTimed(events: ReelEvent[], opts: MergeOptions): ReelEvent[] {
-  const texts = collapseSameClip(events.filter(isText).sort((a, b) => a.start - b.start));
+  // AI text about a Nest event may have no camera yet (its device not found): it still
+  // collapses with the other producer's text about the same event.
+  const ai = events.filter(
+    (e) => AI_PROVIDERS.includes(e.provider) && (!!e.camera || !!nestToken(e)),
+  );
+  const collapsed = collapseSameClip([...ai].sort((a, b) => a.start - b.start));
+  const texts = collapsed.filter(isText);
   const media = events.filter(isMedia);
-  const rest = events.filter((e) => !isText(e) && !isMedia(e));
+  const rest = [
+    ...events.filter((e) => !ai.includes(e) && !isMedia(e)),
+    ...collapsed.filter((e) => !isText(e)),
+  ];
 
   const mediaByCamera = new Map<string, ReelEvent[]>();
   for (const m of media) {

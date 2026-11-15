@@ -297,6 +297,9 @@ describe("mergeEvents with Nest event rows", () => {
     expect(mergeEvents([person, guessed], opts(t0 + 600))[0].category).toBe("person");
     const parcel = { ...text(t0 + 5, "tokP", "Parcel left"), category: "package" as const };
     expect(mergeEvents([person, parcel], opts(t0 + 600))[0].category).toBe("package");
+    // Whichever producer answered first.
+    const early = { ...guessed, start: t0 + 2 };
+    expect(mergeEvents([person, early, parcel], opts(t0 + 600))[0].category).toBe("package");
   });
 
   it("joins text whose clip wasn't found, by its Nest token", () => {
@@ -356,6 +359,35 @@ describe("collapsing AI text about one Nest event", () => {
     const out = mergeEvents([noClip, withClip], opts(t0 + 600));
     expect(out).toHaveLength(1);
     expect(out[0].title).toBe("Child rings the bell");
+    expect(out[0].clip?.path).toBe("media-source://nest/dev1/tokA");
+  });
+});
+
+describe("collapsing AI text about one Nest event without a camera", () => {
+  it("joins an LLM Vision text whose device wasn't found to the other producer's text", () => {
+    const t0 = iso("2026-01-15T10:20:00Z");
+    // The Nest lookup didn't answer: no camera, no clip, only the token.
+    const lost = ev({
+      id: "llmvision:a",
+      provider: "llmvision",
+      start: t0,
+      title: "Child rings the bell",
+      category: "doorbell",
+      nestToken: "tokA",
+    });
+    const found = ev({
+      id: "event_reel:b",
+      provider: "event_reel",
+      camera: "camera.doorbell",
+      start: t0 + 1,
+      title: "Child in a red hat",
+      category: "doorbell",
+      nestToken: "tokA",
+      clip: { kind: "mp4", path: "media-source://nest/dev1/tokA", resolve: true },
+    });
+    const out = mergeEvents([lost, found], opts(t0 + 600));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ camera: "camera.doorbell", title: "Child rings the bell" });
     expect(out[0].clip?.path).toBe("media-source://nest/dev1/tokA");
   });
 });
