@@ -121,9 +121,12 @@ function joinNest(events: ReelEvent[]): { nest: ReelEvent[]; others: ReelEvent[]
     const texts = joined.get(row)?.sort((a, b) => a.start - b.start);
     if (!texts) return row;
     const merged = mergeGroup(row, texts);
-    // A ring Nest reported stays a doorbell moment, whatever the AI saw.
-    const ring = [row, ...texts].some((e) => e.category === "doorbell");
-    return ring ? { ...merged, category: "doorbell" as const } : merged;
+    // What Nest reported wins over a guess: a ring stays a doorbell moment, and a person or
+    // motion row doesn't become one because LLM Vision calls every Nest clip a doorbell.
+    // A more specific AI category (a package, say) still names a person or motion row.
+    if (row.category === "doorbell") return { ...merged, category: "doorbell" as const };
+    const guess = merged.category === "doorbell" || VAGUE.includes(merged.category);
+    return guess ? { ...merged, category: row.category } : merged;
   });
   return { nest, others };
 }

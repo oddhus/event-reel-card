@@ -287,6 +287,18 @@ describe("mergeEvents with Nest event rows", () => {
     expect(out[0].aliases).toContain("event_reel:A courier holds a parcel");
   });
 
+  it("keeps what Nest saw over a doorbell guess, and takes a more specific AI category", () => {
+    const person = { ...nestRow(t0, ["tokP"]), category: "person" as const };
+    // LLM Vision calls every Nest clip a doorbell when its text has no category.
+    const guessed = {
+      ...text(t0 + 5, "tokP", "Someone at the door"),
+      category: "doorbell" as const,
+    };
+    expect(mergeEvents([person, guessed], opts(t0 + 600))[0].category).toBe("person");
+    const parcel = { ...text(t0 + 5, "tokP", "Parcel left"), category: "package" as const };
+    expect(mergeEvents([person, parcel], opts(t0 + 600))[0].category).toBe("package");
+  });
+
   it("joins text whose clip wasn't found, by its Nest token", () => {
     const noClip = {
       ...text(t0 + 5, "tokA", "Parcel at the door"),

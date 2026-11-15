@@ -492,7 +492,10 @@ Goal: one row per real-world moment, with the AI title and description plus the 
 
 0. **Nest event rows** (`nest.events`, §2.3) first take every AI text whose clip is one of
    their Nest tokens, exactly, never by time, through the same many-to-one rule (3–4).
-   The rest goes on to step 1.
+   The rest goes on to step 1. Nest's own type wins over a doorbell guess (LLM Vision
+   calls every Nest clip a doorbell); a more specific AI category still names a person or
+   motion row. Known: texts that joined a Nest row don't count toward `hide_unconfirmed`
+   on a camera that also has Frigate, which errs toward showing the footage.
 1. Split events into **text events** (LLM Vision or Event Reel, with a camera) and
    **media events** (Frigate reviews). Text events that share a Nest clip (the same ring
    described by both AI producers) first collapse into one, with the later text in

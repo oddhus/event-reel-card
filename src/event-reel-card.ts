@@ -270,7 +270,15 @@ export class EventReelCard extends LitElement {
     }
     if (!prev) return;
     const frigateChanged = this._frigateCamerasChanged(prev, hass);
-    if (prev.entities !== hass.entities || prev.services !== hass.services || frigateChanged) {
+    // Nest registers no services, so it is noticed when it joins the loaded components.
+    const nestLoaded =
+      prev.config.components.includes("nest") !== hass.config.components.includes("nest");
+    if (
+      prev.entities !== hass.entities ||
+      prev.services !== hass.services ||
+      frigateChanged ||
+      nestLoaded
+    ) {
       // An integration may show up after the card started (a cold load, HA restarting), or
       // go away: fetch from it, or drop its rows, now rather than on the next refresh.
       const before = this._activeTypes();

@@ -67,6 +67,13 @@ describe("nestSession", () => {
     expect(nestSession(token("504", "n:5"))).toBe("504");
   });
 
+  it("reads url-safe base64 too", () => {
+    // ["?>?", "1"] encodes with "/" in standard base64, "_" in url-safe.
+    const std = btoa(JSON.stringify(["?>?", "1"]));
+    expect(std).toContain("/");
+    expect(nestSession(std.replaceAll("/", "_"))).toBe("?>?");
+  });
+
   it("is undefined for a token in another format", () => {
     expect(nestSession("not-base64!")).toBeUndefined();
     expect(nestSession(btoa("{}"))).toBeUndefined();
@@ -220,6 +227,18 @@ describe("Nest event provider", () => {
       labels: ["chime"],
       clip: { kind: "mp4", path: `media-source://nest/dev1/${ring}`, resolve: true },
     });
+  });
+
+  it("keeps a trigger in the current state that HA's clock put just after the range's end", async () => {
+    const ring = token("502", "n:1");
+    const { hass } = nestHass({
+      "event.front_chime": {
+        state: new Date((range.end + 20) * 1000).toISOString(),
+        attributes: { event_type: "ring", nest_event_id: ring },
+      },
+    });
+    const rows = await createNestEventProvider().fetch(range, ctxFor(hass));
+    expect(rows.map((r) => r.id)).toEqual(["nest:dev1:502"]);
   });
 
   it("asks nothing when there are no Nest event entities", async () => {

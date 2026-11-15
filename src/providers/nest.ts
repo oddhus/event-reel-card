@@ -168,7 +168,8 @@ export function parseNestHistory(
 /** The session of an event token (`["<session>", "<event>"]` in base64), if it has one. */
 export function nestSession(token: string): string | undefined {
   try {
-    const parts: unknown = JSON.parse(atob(token));
+    // Accepts url-safe base64 too, like isNestToken.
+    const parts: unknown = JSON.parse(atob(token.replace(/-/g, "+").replace(/_/g, "/")));
     return Array.isArray(parts) && typeof parts[0] === "string" ? parts[0] : undefined;
   } catch {
     return undefined;
@@ -225,6 +226,9 @@ export function nestEventEntities(hass: HomeAssistant): Map<string, string> {
   entityCache.set(hass.entities, out);
   return out;
 }
+
+/** Seconds a trigger in the current state may lie after the range's end (clock skew). */
+const CLOCK_GRACE = 60;
 
 /** The current state of an event entity as a history row: the recorder lags a trigger. */
 function currentRow(hass: HomeAssistant, id: string): NestHistoryRow[] {
@@ -293,9 +297,14 @@ export function createNestEventProvider(): Provider {
         no_attributes: false,
         significant_changes_only: false,
       });
-      const hits = [...entities].flatMap(([id, deviceId]) =>
-        parseNestHistory([...(history[id] ?? []), ...currentRow(ctx.hass, id)], deviceId, range),
-      );
+      const hits = [...entities].flatMap(([id, deviceId]) => [
+        ...parseNestHistory(history[id] ?? [], deviceId, range),
+        // HA's clock may run a little ahead of the browser's, which set the range's end.
+        ...parseNestHistory(currentRow(ctx.hass, id), deviceId, {
+          start: range.start,
+          end: range.end + CLOCK_GRACE,
+        }),
+      ]);
       return groupNestHits(hits).map((visit) => {
         const camera = ctx.cameras.byDevice(visit.deviceId, "nest");
         const device = ctx.hass.devices[visit.deviceId] as HassDevice | undefined;
