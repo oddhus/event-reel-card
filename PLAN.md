@@ -222,9 +222,14 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
     Reel even when no clip was found), and a Nest ring keeps the doorbell category.
   - A row's id is `nest:<device>:<session>`, so it holds when the visit's first trigger
     leaves the range; the tokens are its aliases, for deep links and the AI join.
-  - Not verified: what a camera without clips plays (the player falls back to the still
-    on an error), and `media_source/resolve_media` on these exact tokens (same format as
-    the tokens verified above).
+  - Checked live on 2026-11-15 with a dev build (config set only in the browser): a day
+    with three rings and two Nest person events gave five rows; the AI text for two rings
+    and a person joined their rows by token, rings kept the doorbell category, and no AI row
+    was left over. The tokens resolve through `media_source/resolve_media` to a signed
+    `/api/nest/event_media/...` URL, and a clip played (640×854, a 1 s preview clip on
+    that doorbell). Two of five clips answered 404 JSON: one ring, and every event of a
+    Nest camera whose media-source listing is empty (a camera without clips). The player
+    shows "unavailable" with Retry for those; the row and its text are still right.
 - The token lookup browses media source (the root, then one call per device). LLM Vision
   waits at most 3 s for it, so a slow browse never holds back the AI events: doorbell rows
   show without a clip, and when the browse answers, the provider's `subscribe` asks for a

@@ -296,5 +296,6 @@ Rebutted: in-place changes to `hass.entities` (HA replaces the object); links to
 `nest:<token>` ids (never released); identical tokens on two devices (tokens carry a
 session counter); with two AI producers on one ring, "doorbell" from either still wins over
 the other's category (the rule on main). Left open: texts joined to Nest rows don't count
-toward `hide_unconfirmed` (PLAN §3.5). Not checked yet: a dev build on a real Home
-Assistant (clip playback, signing, resolve of these tokens).
+toward `hide_unconfirmed` (PLAN §3.5). Checked on a real Home Assistant afterwards
+(PLAN §2.3): rows, the token join and playback work; clips Nest doesn't keep answer 404
+and show as unavailable.
