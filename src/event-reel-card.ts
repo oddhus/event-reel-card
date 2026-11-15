@@ -32,7 +32,12 @@ import type { Category } from "./types";
 import type { HomeAssistant } from "./ha-types";
 import { getLocalize, resolveLanguage } from "./i18n";
 import { createEntityProvider, latestEntityChangeBefore } from "./providers/entity";
-import { createNestEventProvider, latestNestBefore, nestEventsChanged } from "./providers/nest";
+import {
+  createNestEventProvider,
+  latestNestBefore,
+  nestEntitiesSignature,
+  nestEventsChanged,
+} from "./providers/nest";
 import { createEventReelProvider, latestEventReelBefore } from "./providers/eventreel";
 import { frigateProvider, latestReviewBefore, markReviewed } from "./providers/frigate";
 import {
@@ -299,7 +304,13 @@ export class EventReelCard extends LitElement {
     if (this._status("llmvision") === "active" && timelineChanged(prev, hass)) {
       this._debouncedRefresh("llmvision", 2000);
     }
-    if (this._status("nest") === "active" && nestEventsChanged(prev, hass)) {
+    // A trigger, or Nest event entities that arrived after the first fetch.
+    if (
+      this._status("nest") === "active" &&
+      (nestEventsChanged(prev, hass) ||
+        (prev.entities !== hass.entities &&
+          nestEntitiesSignature(prev) !== nestEntitiesSignature(hass)))
+    ) {
       this._debouncedRefresh("nest", 1000);
     }
   }

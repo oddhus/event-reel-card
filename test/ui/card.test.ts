@@ -854,7 +854,9 @@ describe("Nest events as rows (PLAN §3.2)", () => {
     );
     expect(rows(m).some((r) => r.textContent.includes("The doorbell rang at"))).toBe(false);
     await userEvent.click(ring);
-    const id = `nest:${m.data.nestToken}`;
+    // A row's id is the device and the Nest session, the token's first element.
+    const session = (JSON.parse(atob(m.data.nestToken)) as string[])[0];
+    const id = `nest:nest-device-1:${session}`;
     await until(() => ids(m).includes(id));
   });
 });

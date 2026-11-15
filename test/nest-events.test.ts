@@ -88,7 +88,7 @@ describe("groupNestHits", () => {
     expect(visits[0]).toMatchObject({ tokens: [token("503", "n:1")], end: undefined });
   });
 
-  it("joins two rings of one session, and keeps the first token as the row's", () => {
+  it("joins two rings of one session", () => {
     const visits = groupNestHits([
       hit("2026-01-15T09:00:34Z", "ring", token("504", "n:5")),
       hit("2026-01-15T09:00:00Z", "ring", token("504", "n:1")),
@@ -98,6 +98,7 @@ describe("groupNestHits", () => {
         deviceId: "dev1",
         token: token("504", "n:1"),
         tokens: [token("504", "n:1"), token("504", "n:5")],
+        session: "504",
         type: "ring",
         start: iso("2026-01-15T09:00:00Z"),
         end: iso("2026-01-15T09:00:34Z"),
@@ -122,6 +123,22 @@ describe("groupNestHits", () => {
     expect(visits).toHaveLength(1);
     expect(visits[0]).toMatchObject({ type: "ring", token: token("600", "n:1") });
     expect(visits[0].tokens[0]).toBe(token("600", "1"));
+  });
+
+  it("keeps a token seen on two devices on both", () => {
+    const tok = token("700", "1");
+    const visits = groupNestHits([
+      hit("2026-01-15T09:00:00Z", "camera_person", tok, "dev1"),
+      hit("2026-01-15T09:00:00Z", "camera_person", tok, "dev2"),
+    ]);
+    expect(visits.map((v) => v.deviceId).sort()).toEqual(["dev1", "dev2"]);
+  });
+
+  it("names a visit by its session, which holds when its first trigger is gone", () => {
+    const first = hit("2026-01-15T09:00:00Z", "ring", token("800", "n:1"));
+    const second = hit("2026-01-15T09:00:30Z", "ring", token("800", "n:2"));
+    expect(groupNestHits([first, second])[0].session).toBe("800");
+    expect(groupNestHits([second])[0].session).toBe("800");
   });
 
   it("keeps the same session on two devices apart", () => {
@@ -194,7 +211,7 @@ describe("Nest event provider", () => {
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      id: `nest:${ring}`,
+      id: "nest:dev1:501",
       aliases: [ring],
       category: "doorbell",
       // No camera mapped and an empty name_by_user: the device's own name.

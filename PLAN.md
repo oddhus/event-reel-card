@@ -220,8 +220,8 @@ HTTP media through the integration proxy. `{iid}` is the instance id.
     stores a trigger a few seconds after the state changes; the token dedupe makes it free
     once history has it. AI text joins by a `nestToken` field (set by LLM Vision and Event
     Reel even when no clip was found), and a Nest ring keeps the doorbell category.
-  - Known: a visit whose first trigger falls out of the range takes its next token as id
-    until that one does too.
+  - A row's id is `nest:<device>:<session>`, so it holds when the visit's first trigger
+    leaves the range; the tokens are its aliases, for deep links and the AI join.
   - Not verified: what a camera without clips plays (the player falls back to the still
     on an error), and `media_source/resolve_media` on these exact tokens (same format as
     the tokens verified above).

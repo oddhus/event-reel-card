@@ -131,8 +131,10 @@ export type NestVisit = {
   deviceId: string;
   /** The token whose clip and thumbnail the row shows. */
   token: string;
-  /** Every token of the visit, oldest first; the first names the row. */
+  /** Every token of the visit, oldest first. */
   tokens: string[];
+  /** The visit's session, or its first token when that has none; names the row. */
+  session: string;
   type: string;
   start: number;
   end?: number;
@@ -182,8 +184,10 @@ export function groupNestHits(hits: NestHit[]): NestVisit[] {
   const seen = new Set<string>();
   const visits = new Map<string, NestHit[]>();
   for (const hit of [...hits].sort((a, b) => a.at - b.at)) {
-    if (seen.has(hit.token)) continue;
-    seen.add(hit.token);
+    // Tokens are scoped to their device, like the visits.
+    const once = `${hit.deviceId}\n${hit.token}`;
+    if (seen.has(once)) continue;
+    seen.add(once);
     const key = `${hit.deviceId}\n${nestSession(hit.token) ?? hit.token}`;
     visits.set(key, [...(visits.get(key) ?? []), hit]);
   }
@@ -198,6 +202,7 @@ export function groupNestHits(hits: NestHit[]): NestVisit[] {
       deviceId: lead.deviceId,
       token: lead.token,
       tokens: list.map((h) => h.token),
+      session: nestSession(list[0].token) ?? list[0].token,
       type: lead.type,
       start: list[0].at,
       end: last > list[0].at ? last : undefined,
@@ -233,6 +238,11 @@ export function latestNestBefore(hass: HomeAssistant, before: number): number | 
     .map((id) => Date.parse((hass.states[id] as HassEntity | undefined)?.state ?? "") / 1000)
     .filter((t) => Number.isFinite(t) && t < before);
   return times.length ? Math.max(...times) : undefined;
+}
+
+/** Changes when Nest event entities appear, go or move to another device. */
+export function nestEntitiesSignature(hass: HomeAssistant): string {
+  return JSON.stringify([...nestEventEntities(hass)].sort(([a], [b]) => a.localeCompare(b)));
 }
 
 /** True when a Nest event entity triggered, which means a new row. */
@@ -297,7 +307,8 @@ export function createNestEventProvider(): Provider {
         const media = nestMedia(visit.deviceId, visit.token);
         const label = LABEL[visit.type];
         return {
-          id: `nest:${visit.tokens[0]}`,
+          // By device and session, so the id holds when the visit's first trigger leaves the range.
+          id: `nest:${visit.deviceId}:${visit.session}`,
           provider: "nest",
           sources: ["nest"],
           // Every token, so AI text about any trigger of the visit joins this row.
