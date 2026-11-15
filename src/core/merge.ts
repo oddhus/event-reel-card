@@ -59,26 +59,34 @@ function mergeGroup(media: ReelEvent, texts: ReelEvent[]): ReelEvent {
  * the row and the others as extra text, so a ring described twice is still one row.
  */
 function collapseSameClip(texts: ReelEvent[]): ReelEvent[] {
+  // The Nest event, so a text whose clip wasn't found still meets its twin; else the clip.
+  const keyOf = (t: ReelEvent) => {
+    const token = nestToken(t);
+    return token ? `nest:${token}` : t.clip?.path;
+  };
   const byClip = new Map<string, ReelEvent[]>();
   const out: ReelEvent[] = [];
   for (const t of texts) {
-    if (!t.clip) {
+    const key = keyOf(t);
+    if (!key) {
       out.push(t);
       continue;
     }
-    const list = byClip.get(t.clip.path);
+    const list = byClip.get(key);
     if (list) list.push(t);
     else {
-      byClip.set(t.clip.path, [t]);
+      byClip.set(key, [t]);
       out.push(t);
     }
   }
   return out.map((t) => {
-    const same = t.clip ? (byClip.get(t.clip.path) ?? []) : [];
+    const key = keyOf(t);
+    const same = key ? (byClip.get(key) ?? []) : [];
     if (same.length < 2) return t;
     const [first, ...rest] = same;
     return {
       ...first,
+      clip: first.clip ?? rest.find((r) => r.clip)?.clip,
       sources: [...new Set(same.flatMap((s) => s.sources))],
       aliases: [...(first.aliases ?? []), ...rest.flatMap((r) => [r.id, ...(r.aliases ?? [])])],
       description: first.description ?? rest.find((r) => r.description)?.description,

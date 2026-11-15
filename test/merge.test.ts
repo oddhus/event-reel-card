@@ -329,3 +329,33 @@ describe("mergeEvents with Nest event rows", () => {
     ]);
   });
 });
+
+describe("collapsing AI text about one Nest event", () => {
+  it("joins two producers' text by Nest token when one has no clip", () => {
+    const t0 = iso("2026-01-15T10:20:00Z");
+    const withClip = ev({
+      id: "llmvision:a",
+      provider: "llmvision",
+      camera: "camera.doorbell",
+      start: t0,
+      title: "Child rings the bell",
+      category: "doorbell",
+      nestToken: "tokA",
+      clip: { kind: "mp4", path: "media-source://nest/dev1/tokA", resolve: true },
+    });
+    // Event Reel drops the clip for a camera that sent only a picture.
+    const noClip = ev({
+      id: "event_reel:b",
+      provider: "event_reel",
+      camera: "camera.doorbell",
+      start: t0 + 1,
+      title: "Child in a red hat",
+      category: "doorbell",
+      nestToken: "tokA",
+    });
+    const out = mergeEvents([noClip, withClip], opts(t0 + 600));
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe("Child rings the bell");
+    expect(out[0].clip?.path).toBe("media-source://nest/dev1/tokA");
+  });
+});
