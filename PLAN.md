@@ -6,7 +6,7 @@ companion Event Reel integration or LLM Vision), Frigate
 review items with **animated thumbnails** and **the exact video clip**, Nest doorbell
 clips, and any other event you want to log.
 
-Status: v0.6.0 released 2026-10-29 (M1–M3 done, then loading and day navigation, review fixes, the Event Reel provider for the companion integration, the GenAI threat badge, playback that tells a stall from a codec failure, setup guidance, context bands and presence at event time; §9, §2.6, §2.2, §5.4, §5.9, §5.6, §5.10). Reviews are logged in [docs/review-log.md](docs/review-log.md) (§12). This
+Status: v0.7.0 released 2026-11-15 (M1–M3 done, then loading and day navigation, review fixes, the Event Reel provider for the companion integration, the GenAI threat badge, playback that tells a stall from a codec failure, setup guidance, context bands, presence at event time, the unreviewed and nobody-home chips, doors attached to camera rows and Nest event rows; §9, §2.6, §2.2, §5.4, §5.9, §5.6, §5.10). Reviews are logged in [docs/review-log.md](docs/review-log.md) (§12). This
 document is the brief for the implementing agent. Private details about the reference install
 (entity ids, hosts, camera mapping, deploy steps) live in `CLAUDE.local.md`, which is
 gitignored. Read it if it exists, and never copy its contents into tracked files.

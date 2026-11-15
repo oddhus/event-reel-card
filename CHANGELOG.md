@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The project uses
 
 ## Unreleased
 
+## [0.7.0] - 2026-11-15
+
 ### Added
 
 - Two filter chips: "Unreviewed" shows only Frigate reviews not yet marked reviewed, and
